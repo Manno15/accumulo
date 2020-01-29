@@ -2535,7 +2535,6 @@ public class TabletServer extends AbstractServer {
         TabletResourceManager trm =
             resourceManager.createTabletResourceManager(extent, getTableConfiguration(extent));
         TabletData data = new TabletData(extent, fs, tabletMetadata);
-
         tablet = new Tablet(TabletServer.this, extent, trm, data);
         // If a minor compaction starts after a tablet opens, this indicates a log recovery
         // occurred. This recovered data must be minor compacted.
@@ -2555,7 +2554,10 @@ public class TabletServer extends AbstractServer {
           throw new RuntimeException("Minor compaction after recovery fails for " + extent);
         }
         Assignment assignment = new Assignment(extent, getTabletSession());
-        assignment.server=data.getLastLocation();
+        if(data.getLastLocation() != assignment.server){
+          log.info("LOCATIONS DONT MATCH");
+          tablet.updateLastLocation(System.currentTimeMillis());
+        }
         TabletStateStore.setLocation(getContext(), assignment);
 
         synchronized (openingTablets) {
