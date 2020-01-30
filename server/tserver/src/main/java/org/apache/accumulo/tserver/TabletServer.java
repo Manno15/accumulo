@@ -2536,6 +2536,10 @@ public class TabletServer extends AbstractServer {
             resourceManager.createTabletResourceManager(extent, getTableConfiguration(extent));
         TabletData data = new TabletData(extent, fs, tabletMetadata);
         tablet = new Tablet(TabletServer.this, extent, trm, data);
+        if(data.getLastLocation() == null) {
+          log.info("EQUAL TO NULL");
+          tablet.updateLastLocation(System.currentTimeMillis());
+        }
         // If a minor compaction starts after a tablet opens, this indicates a log recovery
         // occurred. This recovered data must be minor compacted.
         // There are three reasons to wait for this minor compaction to finish before placing the
@@ -2553,9 +2557,10 @@ public class TabletServer extends AbstractServer {
             && !tablet.minorCompactNow(MinorCompactionReason.RECOVERY)) {
           throw new RuntimeException("Minor compaction after recovery fails for " + extent);
         }
+
         Assignment assignment = new Assignment(extent, getTabletSession());
 
-          tablet.updateLastLocation(System.currentTimeMillis());
+
 
         TabletStateStore.setLocation(getContext(), assignment);
 
