@@ -1771,7 +1771,8 @@ public class TabletServer extends AbstractServer {
               }
               return;
             }
-
+            Tablet tablet = getOnlineTablet(extent);
+            tablet.updateLastLocation(System.currentTimeMillis());
             unopenedTablets.add(extent);
           }
         }
