@@ -1783,6 +1783,8 @@ public class TabletServer extends AbstractServer {
       final AssignmentHandler ah = new AssignmentHandler(extent);
       // final Runnable ah = new LoggingRunnable(log, );
       // Root tablet assignment must take place immediately
+      Tablet tablet = getOnlineTablet(extent);
+      tablet.updateLastLocation(System.currentTimeMillis());
 
       if (extent.isRootTablet()) {
         new Daemon("Root Tablet Assignment") {
@@ -1801,8 +1803,6 @@ public class TabletServer extends AbstractServer {
         if (extent.isMeta()) {
           resourceManager.addMetaDataAssignment(extent, log, ah);
         } else {
-          Tablet tablet = getOnlineTablet(extent);
-          tablet.updateLastLocation(System.currentTimeMillis());
           resourceManager.addAssignment(extent, log, ah);
         }
       }
