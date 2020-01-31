@@ -2556,12 +2556,9 @@ public class TabletServer extends AbstractServer {
         }
 
         Assignment assignment = new Assignment(extent, getTabletSession());
-        if(!data.getLastLocation().toString().equals(getClientAddressString())) {
+
           log.info("EQUAL TO client address");
           tablet.updateLastLocation(System.currentTimeMillis());
-        }
-
-
         TabletStateStore.setLocation(getContext(), assignment);
 
         synchronized (openingTablets) {
