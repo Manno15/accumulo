@@ -1783,8 +1783,6 @@ public class TabletServer extends AbstractServer {
       final AssignmentHandler ah = new AssignmentHandler(extent);
       // final Runnable ah = new LoggingRunnable(log, );
       // Root tablet assignment must take place immediately
-      Tablet tablet = getOnlineTablet(extent);
-      tablet.updateLastLocation(System.currentTimeMillis());
 
       if (extent.isRootTablet()) {
         new Daemon("Root Tablet Assignment") {
@@ -2538,10 +2536,10 @@ public class TabletServer extends AbstractServer {
             resourceManager.createTabletResourceManager(extent, getTableConfiguration(extent));
         TabletData data = new TabletData(extent, fs, tabletMetadata);
         tablet = new Tablet(TabletServer.this, extent, trm, data);
-//        if(data.getLastLocation() == null) {
-//          log.info("EQUAL TO NULL");
-//          tablet.updateLastLocation(System.currentTimeMillis());
-//        }
+        if(data.getLastLocation().toString().equals(getClientAddressString())) {
+          log.info("EQUAL TO client address");
+          tablet.updateLastLocation(System.currentTimeMillis());
+        }
         // If a minor compaction starts after a tablet opens, this indicates a log recovery
         // occurred. This recovered data must be minor compacted.
         // There are three reasons to wait for this minor compaction to finish before placing the
