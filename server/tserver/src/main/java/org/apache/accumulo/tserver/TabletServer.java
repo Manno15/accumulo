@@ -1771,8 +1771,7 @@ public class TabletServer extends AbstractServer {
               }
               return;
             }
-            Tablet tablet = getOnlineTablet(extent);
-            tablet.updateLastLocation(System.currentTimeMillis());
+
             unopenedTablets.add(extent);
           }
         }
@@ -1802,6 +1801,8 @@ public class TabletServer extends AbstractServer {
         if (extent.isMeta()) {
           resourceManager.addMetaDataAssignment(extent, log, ah);
         } else {
+          Tablet tablet = getOnlineTablet(extent);
+          tablet.updateLastLocation(System.currentTimeMillis());
           resourceManager.addAssignment(extent, log, ah);
         }
       }
