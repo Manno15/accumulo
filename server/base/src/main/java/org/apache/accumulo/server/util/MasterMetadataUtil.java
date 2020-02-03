@@ -269,6 +269,7 @@ public class MasterMetadataUtil {
 
     // remove the old location
     if (lastLocation != null && !lastLocation.equals(self)) {
+      log.info("Location being deleted");
       tablet.deleteLocation(lastLocation, LocationType.LAST);
     }
 

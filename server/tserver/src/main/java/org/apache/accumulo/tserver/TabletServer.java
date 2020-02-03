@@ -2536,10 +2536,8 @@ public class TabletServer extends AbstractServer {
             resourceManager.createTabletResourceManager(extent, getTableConfiguration(extent));
         TabletData data = new TabletData(extent, fs, tabletMetadata);
         tablet = new Tablet(TabletServer.this, extent, trm, data);
-        if(tablet.getLastLocation() != data.getLastLocation()) {
-          log.info("Tserver Instance do not match. Running Update Last Location");
-          tablet.updateLastLocation(System.currentTimeMillis());
-        }
+        tablet.updateLastLocation(System.currentTimeMillis());
+
         // If a minor compaction starts after a tablet opens, this indicates a log recovery
         // occurred. This recovered data must be minor compacted.
         // There are three reasons to wait for this minor compaction to finish before placing the
