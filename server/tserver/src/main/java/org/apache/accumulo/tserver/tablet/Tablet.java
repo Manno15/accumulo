@@ -2747,7 +2747,9 @@ public class Tablet {
       lastLocation = null;
     }
   }
-
+  public TServerInstance getLastLocation(){
+    return lastLocation;
+  }
   /**
    * Checks if a tablets last location needs to be updated
    */
