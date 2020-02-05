@@ -2557,22 +2557,15 @@ public class TabletServer extends AbstractServer {
         }
 
         Assignment assignment = new Assignment(extent, getTabletSession());
-        if(data.getLastLocation() != null && !data.getLastLocation().hostPort().matches(getClientAddressString())){
+        if(data.getLastLocation() != null && !data.getLastLocation().hostPort().equals(assignment.server.hostPort())){
           log.info("Data does not match assignment");
           tablet.updateLastLocation(System.currentTimeMillis());
           log.info("Data location session: {}", data.getLastLocation().getSession());
           log.info("Data location host: {}", data.getLastLocation().host());
           log.info("Data location hostPort: {}", data.getLastLocation().hostPort());
-        }
-        if(data.getLastLocation() != null && !data.getLastLocation().hostPort().matches(assignment.server.hostPort())) {
-          log.info("matches assignment hostport");
-        }
-        if(data.getLastLocation() != null && !data.getLastLocation().hostPort().equals(assignment.server.hostPort())) {
-          log.info("equals host port");
+          log.info("Assignment server {}", assignment.server.hostPort());
         }
 
-        log.info("Client Address String: {}", getClientAddressString());
-        log.info("Assignment server {}", assignment.server);
         TabletStateStore.setLocation(getContext(), assignment);
 
         synchronized (openingTablets) {
