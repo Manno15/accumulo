@@ -2566,7 +2566,7 @@ public class TabletServer extends AbstractServer {
           log.info("Assignment server {}", assignment.server.hostPort());
         }
 
-        TabletStateStore.setLocation(getContext(), assignment);
+       // TabletStateStore.setLocation(getContext(), assignment);
 
         synchronized (openingTablets) {
           synchronized (onlineTablets) {
