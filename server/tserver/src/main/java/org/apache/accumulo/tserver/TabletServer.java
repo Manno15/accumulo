@@ -2536,7 +2536,6 @@ public class TabletServer extends AbstractServer {
             resourceManager.createTabletResourceManager(extent, getTableConfiguration(extent));
         TabletData data = new TabletData(extent, fs, tabletMetadata);
         tablet = new Tablet(TabletServer.this, extent, trm, data);
-        log.info("Data Location {}", data.getLastLocation());
 
         // If a minor compaction starts after a tablet opens, this indicates a log recovery
         // occurred. This recovered data must be minor compacted.
@@ -2557,16 +2556,12 @@ public class TabletServer extends AbstractServer {
         }
 
         Assignment assignment = new Assignment(extent, getTabletSession());
+       TabletStateStore.setLocation(getContext(), assignment);
         if(data.getLastLocation() != null && !data.getLastLocation().hostPort().equals(assignment.server.hostPort())){
           log.info("Data does not match assignment");
           tablet.updateLastLocation(System.currentTimeMillis());
-          log.info("Data location session: {}", data.getLastLocation().getSession());
-          log.info("Data location host: {}", data.getLastLocation().host());
-          log.info("Data location hostPort: {}", data.getLastLocation().hostPort());
-          log.info("Assignment server {}", assignment.server.hostPort());
         }
 
-       TabletStateStore.setLocation(getContext(), assignment);
 
         synchronized (openingTablets) {
           synchronized (onlineTablets) {
