@@ -1,26 +1,14 @@
 pipeline {
-    agent any
-    tools { 
-        maven 'main' 
-        jdk 'main' 
+    agent {
+        docker {
+            image 'maven:3-alpine'
+            args '-v $HOME/.m2:/root/.m2'
+        }
     }
     stages {
-        stage ('Initialize') {
+        stage('Build') {
             steps {
-                sh '''
-                    echo "PATH = ${PATH}"
-                    echo "M2_HOME = ${M2_HOME}"
-                ''' 
-            }
-        }
-        stage ('Build') {
-            steps {
-                sh 'mvn clean install -PskipQA' 
-            }
-            post {
-                success {
-                    junit 'target/surefire-reports/**/*.xml' 
-                }
+                sh 'mvn -B'
             }
         }
     }
