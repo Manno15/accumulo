@@ -13,7 +13,7 @@ pipeline {
                 }
                 stage('Maven run tests') {
                     agent {
-                        label "shazam"
+                        label "fatthor"
                     }
                     steps {
                         sh "mvn clean verify"
