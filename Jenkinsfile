@@ -1,8 +1,8 @@
 pipeline {
     agent any
     tools { 
-        maven '/usr/share/maven' 
-        jdk '/usr/lib/jvm/java-1.11.0-openjdk' 
+        maven 'main' 
+        jdk 'main' 
     }
     stages {
         stage ('Initialize') {
