@@ -2,7 +2,7 @@ pipeline {
     agent none
     tools {
         maven 'main'
-        jdk11 'nain'
+        jdk 'nain'
     }
     stages {
         stage('Run Tests') {
