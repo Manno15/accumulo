@@ -1,5 +1,9 @@
 pipeline {
     agent none
+    tools {
+        maven 'main'
+        jdk11 'nain'
+    }
     stages {
         stage('Run Tests') {
             parallel {
