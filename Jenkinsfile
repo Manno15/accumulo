@@ -22,9 +22,7 @@ pipeline {
         jdk 'main'
     }
     stages {
-        stage('Run Tests') {
-            parallel {
-                stage('Maven Build skip test') {
+         stage('Quick build. Not sure if Needed') {
                     agent {
                         label "master"
                     }
@@ -32,12 +30,127 @@ pipeline {
                         sh 'mvn clean package -PskipQA'
                     }
                 }
-                stage('Maven run tests') {
+        stage('Run Tests') {
+            parallel {
+               
+                stage('Assemble') {
+                    agent {
+                        label "aquaman"
+                    }
+                    steps {
+                        sh "mvn install -pl assemble"
+                    }
+                }
+                stage('Server/Base') {
+                    agent {
+                        label "aquaman"
+                    }
+                    steps {
+                        sh "mvn install -pl server/base"
+                    }
+                }
+                stage('Server/Monitor') {
+                    agent {
+                        label "aquaman"
+                    }
+                    steps {
+                        sh "mvn install -pl server/monitor"
+                    }
+                }
+                stage('Server/Native') {
+                    agent {
+                        label "aquaman"
+                    }
+                    steps {
+                        sh "mvn install -pl server/native"
+                    }
+                }
+                stage('core') {
+                    agent {
+                        label "superman"
+                    }
+                    steps {
+                        sh "mvn install -pl core"
+                    }
+                }
+                 stage('Server/GC') {
+                    agent {
+                        label "superman"
+                    }
+                    steps {
+                        sh "mvn install -pl server/gc"
+                    }
+                }
+                stage('Hadoop-mapreduce') {
+                    agent {
+                        label "batman"
+                    }
+                    steps {
+                        sh "mvn install -pl hadoop-mapreduce"
+                    }
+                }
+                stage('Server/Master') {
+                    agent {
+                        label "batman"
+                    }
+                    steps {
+                        sh "mvn install -pl server/master"
+                    }
+                }
+                 stage('Iterator-test-harness') {
+                    agent {
+                        label "shazam"
+                    }
+                    steps {
+                        sh "mvn install -pl iterator-test-harness"
+                    }
+                }
+                stage('Server/Tracer') {
+                    agent {
+                        label "shazam"
+                    }
+                    steps {
+                        sh "mvn install -pl server/tracer"
+                    }
+                }
+                 stage('Server/Tserver') {
+                    agent {
+                        label "shazam"
+                    }
+                    steps {
+                        sh "mvn install -pl server/tserver"
+                    }
+                }
+                 stage('Minicluster') {
+                    agent {
+                        label "nightwing"
+                    }
+                    steps {
+                        sh "mvn install -pl minicluster"
+                    }
+                }
+                 stage('Shell') {
+                    agent {
+                        label "nightwing"
+                    }
+                    steps {
+                        sh "mvn install -pl shell"
+                    }
+                }
+                 stage('Start') {
+                    agent {
+                        label "nightwing"
+                    }
+                    steps {
+                        sh "mvn install -pl start"
+                    }
+                }
+                 stage('Tests') {
                     agent {
                         label "fatthor"
                     }
                     steps {
-                        sh "mvn clean verify"
+                        sh "mvn install -pl test"
                     }
                 }
             }
