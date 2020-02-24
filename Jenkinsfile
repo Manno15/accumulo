@@ -22,6 +22,34 @@ pipeline {
         jdk 'main'
     }
     stages {
+         stage('temp step'){
+            parallel{
+                stage('start'){
+              agent {
+                        label "shazam"
+                    }
+                    steps {
+                        sh "mvn install -pl start"
+                    }
+                }
+                  stage('minicluster'){
+              agent {
+                        label "shazam"
+                    }
+                    steps {
+                        sh "mvn install -pl minicluster"
+                    }
+                }
+                  stage('shell'){
+              agent {
+                        label "shazam"
+                    }
+                    steps {
+                        sh "mvn install -pl shell"
+                    }
+                }
+            }
+        }
         stage('Run Tests') {
             parallel {
                
@@ -159,33 +187,6 @@ pipeline {
                 }
             }
         }
-        stage('temp step'){
-            parallel{
-                stage('start'){
-              agent {
-                        label "shazam"
-                    }
-                    steps {
-                        sh "mvn install -pl start"
-                    }
-                }
-                  stage('minicluster'){
-              agent {
-                        label "shazam"
-                    }
-                    steps {
-                        sh "mvn install -pl minicluster"
-                    }
-                }
-                  stage('shell'){
-              agent {
-                        label "shazam"
-                    }
-                    steps {
-                        sh "mvn install -pl shell"
-                    }
-                }
-            }
-        }
+       
     }
 }
