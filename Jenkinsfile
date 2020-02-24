@@ -35,7 +35,7 @@ pipeline {
                
                 stage('Assemble') {
                     agent {
-                        label "aquaman"
+                        label "master"
                     }
                     steps {
                         sh "mvn install -pl assemble"
