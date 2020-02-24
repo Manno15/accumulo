@@ -59,7 +59,7 @@ pipeline {
                 }
                 stage('Server/Native') {
                     agent {
-                        label "aquaman"
+                        label "superman"
                     }
                     steps {
                         sh "mvn install -pl server/native"
