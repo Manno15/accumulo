@@ -103,6 +103,7 @@ pipeline {
                     }
                     steps {
                         sh "mvn install -pl iterator-test-harness"
+                        sh "mvn install -pl minicluster"
                     }
                 }
                 stage('Server/Tracer') {
@@ -111,6 +112,7 @@ pipeline {
                     }
                     steps {
                         sh "mvn install -pl server/tracer"
+                        sh "mvn install -pl shell"
                     }
                 }
                  stage('Server/Tserver') {
@@ -119,32 +121,33 @@ pipeline {
                     }
                     steps {
                         sh "mvn install -pl server/tserver"
-                    }
-                }
-                 stage('Minicluster') {
-                    agent {
-                        label "nightwing"
-                    }
-                    steps {
-                        sh "mvn install -pl minicluster"
-                    }
-                }
-                 stage('Shell') {
-                    agent {
-                        label "nightwing"
-                    }
-                    steps {
-                        sh "mvn install -pl shell"
-                    }
-                }
-                 stage('Start') {
-                    agent {
-                        label "nightwing"
-                    }
-                    steps {
                         sh "mvn install -pl start"
                     }
                 }
+                //  stage('Minicluster') {
+                //     agent {
+                //         label "nightwing"
+                //     }
+                //     steps {
+                //         sh "mvn install -pl minicluster"
+                //     }
+                // }
+                //  stage('Shell') {
+                //     agent {
+                //         label "nightwing"
+                //     }
+                //     steps {
+                //         sh "mvn install -pl shell"
+                //     }
+                // }
+                //  stage('Start') {
+                //     agent {
+                //         label "nightwing"
+                //     }
+                //     steps {
+                //         sh "mvn install -pl start"
+                //     }
+                // }
                  stage('Tests') {
                     agent {
                         label "fatthor"
