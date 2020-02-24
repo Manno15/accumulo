@@ -104,7 +104,6 @@ pipeline {
                     steps {
                         sh 'mvn clean package -PskipQA'
                         sh "mvn install -pl iterator-test-harness"
-                        sh "mvn install -pl minicluster"
                     }
                 }
                 stage('Server/Tracer') {
@@ -114,7 +113,6 @@ pipeline {
                     steps {
                         sh 'mvn clean package -PskipQA'
                         sh "mvn install -pl server/tracer"
-                        sh "mvn install -pl shell"
                     }
                 }
                  stage('Server/Tserver') {
@@ -124,7 +122,6 @@ pipeline {
                     steps {
                         sh 'mvn clean package -PskipQA'
                         sh "mvn install -pl server/tserver"
-                        sh "mvn install -pl start"
                     }
                 }
                 //  stage('Minicluster') {
@@ -157,7 +154,35 @@ pipeline {
                     }
                     steps {
                         sh 'mvn clean package -PskipQA'
-                        sh "mvn install -pl test"
+                        //sh "mvn install -pl test"
+                    }
+                }
+            }
+        }
+        stage('temp step'){
+            parallel{
+                stage('start'){
+              agent {
+                        label "shazam"
+                    }
+                    steps {
+                        sh "mvn install -pl start"
+                    }
+                }
+                  stage('minicluster'){
+              agent {
+                        label "shazam"
+                    }
+                    steps {
+                        sh "mvn install -pl minicluster"
+                    }
+                }
+                  stage('shell'){
+              agent {
+                        label "shazam"
+                    }
+                    steps {
+                        sh "mvn install -pl shell"
                     }
                 }
             }
