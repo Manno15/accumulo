@@ -22,14 +22,6 @@ pipeline {
         jdk 'main'
     }
     stages {
-         stage('Quick build. Not sure if Needed') {
-                    agent {
-                        label "master"
-                    }
-                    steps {
-                        sh 'mvn clean package -PskipQA'
-                    }
-                }
         stage('Run Tests') {
             parallel {
                
@@ -38,6 +30,7 @@ pipeline {
                         label "master"
                     }
                     steps {
+                        sh 'mvn clean package -PskipQA'
                         sh "mvn install -pl assemble"
                     }
                 }
@@ -46,6 +39,7 @@ pipeline {
                         label "aquaman"
                     }
                     steps {
+                        sh 'mvn clean package -PskipQA'
                         sh "mvn install -pl server/base"
                     }
                 }
@@ -54,6 +48,7 @@ pipeline {
                         label "aquaman"
                     }
                     steps {
+                        sh 'mvn clean package -PskipQA'
                         sh "mvn install -pl server/monitor"
                     }
                 }
@@ -62,6 +57,7 @@ pipeline {
                         label "superman"
                     }
                     steps {
+                        sh 'mvn clean package -PskipQA'
                         sh "mvn install -pl server/native"
                     }
                 }
@@ -70,6 +66,7 @@ pipeline {
                         label "superman"
                     }
                     steps {
+                        sh 'mvn clean package -PskipQA'
                         sh "mvn install -pl core"
                     }
                 }
@@ -78,6 +75,7 @@ pipeline {
                         label "superman"
                     }
                     steps {
+                        sh 'mvn clean package -PskipQA'
                         sh "mvn install -pl server/gc"
                     }
                 }
@@ -86,6 +84,7 @@ pipeline {
                         label "batman"
                     }
                     steps {
+                        sh 'mvn clean package -PskipQA'
                         sh "mvn install -pl hadoop-mapreduce"
                     }
                 }
@@ -94,6 +93,7 @@ pipeline {
                         label "batman"
                     }
                     steps {
+                        sh 'mvn clean package -PskipQA'
                         sh "mvn install -pl server/master"
                     }
                 }
@@ -102,6 +102,7 @@ pipeline {
                         label "shazam"
                     }
                     steps {
+                        sh 'mvn clean package -PskipQA'
                         sh "mvn install -pl iterator-test-harness"
                         sh "mvn install -pl minicluster"
                     }
@@ -111,6 +112,7 @@ pipeline {
                         label "shazam"
                     }
                     steps {
+                        sh 'mvn clean package -PskipQA'
                         sh "mvn install -pl server/tracer"
                         sh "mvn install -pl shell"
                     }
@@ -120,6 +122,7 @@ pipeline {
                         label "shazam"
                     }
                     steps {
+                        sh 'mvn clean package -PskipQA'
                         sh "mvn install -pl server/tserver"
                         sh "mvn install -pl start"
                     }
@@ -153,6 +156,7 @@ pipeline {
                         label "fatthor"
                     }
                     steps {
+                        sh 'mvn clean package -PskipQA'
                         sh "mvn install -pl test"
                     }
                 }
