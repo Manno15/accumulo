@@ -72,7 +72,7 @@ pipeline {
                 }
                  stage('Server/GC') {
                     agent {
-                        label "superman"
+                        label "master"
                     }
                     steps {
                         sh 'mvn clean package -PskipQA'
