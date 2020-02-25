@@ -22,34 +22,6 @@ pipeline {
         jdk 'main'
     }
     stages {
-         stage('temp step'){
-            parallel{
-                stage('start'){
-              agent {
-                        label "shazam"
-                    }
-                    steps {
-                        sh "mvn install -pl start"
-                    }
-                }
-                  stage('minicluster'){
-              agent {
-                        label "shazam"
-                    }
-                    steps {
-                        sh "mvn install -pl minicluster"
-                    }
-                }
-                  stage('shell'){
-              agent {
-                        label "shazam"
-                    }
-                    steps {
-                        sh "mvn install -pl shell"
-                    }
-                }
-            }
-        }
         stage('Run Tests') {
             parallel {
                
@@ -152,30 +124,33 @@ pipeline {
                         sh "mvn install -pl server/tserver"
                     }
                 }
-                //  stage('Minicluster') {
-                //     agent {
-                //         label "nightwing"
-                //     }
-                //     steps {
-                //         sh "mvn install -pl minicluster"
-                //     }
-                // }
-                //  stage('Shell') {
-                //     agent {
-                //         label "nightwing"
-                //     }
-                //     steps {
-                //         sh "mvn install -pl shell"
-                //     }
-                // }
-                //  stage('Start') {
-                //     agent {
-                //         label "nightwing"
-                //     }
-                //     steps {
-                //         sh "mvn install -pl start"
-                //     }
-                // }
+                 stage('Minicluster') {
+                    agent {
+                        label "nightwing"
+                    }
+                    steps {
+                        sh 'mvn clean package -PskipQA'
+                        sh "mvn install -pl minicluster"
+                    }
+                }
+                 stage('Shell') {
+                    agent {
+                        label "nightwing"
+                    }
+                    steps {
+                        sh 'mvn clean package -PskipQA'
+                        sh "mvn install -pl shell"
+                    }
+                }
+                 stage('Start') {
+                    agent {
+                        label "nightwing"
+                    }
+                    steps {
+                        sh 'mvn clean package -PskipQA'
+                        sh "mvn install -pl start"
+                    }
+                }
                  stage('Tests') {
                     agent {
                         label "fatthor"
