@@ -157,7 +157,7 @@ pipeline {
                     }
                     steps {
                         sh 'mvn clean package -PskipQA'
-                        //sh "mvn install -pl test"
+                        sh "mvn install -pl test"
                     }
                 }
             }
