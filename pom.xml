@@ -967,6 +967,8 @@
               <java.io.tmpdir>${project.build.directory}</java.io.tmpdir>
             </systemPropertyVariables>
             <argLine>${unitTestMemSize}</argLine>
+            <parallel>classes</parallel>
+            <threadCount>5</threadCount>
           </configuration>
         </plugin>
         <plugin>
