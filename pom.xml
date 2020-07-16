@@ -967,8 +967,14 @@
               <java.io.tmpdir>${project.build.directory}</java.io.tmpdir>
             </systemPropertyVariables>
             <argLine>${unitTestMemSize}</argLine>
-            <parallel>classes</parallel>
-            <threadCount>5</threadCount>
+            <parallel>all</parallel>
+            <threadCount>10</threadCount>
+            <useUnlimitedThreads>true</useUnlimitedThreads>
+            <threadCountSuites>2</threadCountSuites>
+            <threadCountClasses>2</threadCountClasses>
+            <threadCountMethods>6</threadCountMethods>
+            <parallelTestTimeoutInSeconds>3.5</parallelTestTimeoutInSeconds>
+            <forkCount>2.5C</forkCount>
           </configuration>
         </plugin>
         <plugin>
