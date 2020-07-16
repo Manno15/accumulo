@@ -48,7 +48,7 @@ import com.google.common.collect.Iterables;
 
 public class GroupBalancerTest {
 
-  private static Function<KeyExtent,String> partitioner = new Function<KeyExtent,String>() {
+  private static Function<KeyExtent,String> partitioner = new Function<>() {
 
     @Override
     public String apply(KeyExtent input) {
@@ -133,7 +133,7 @@ public class GroupBalancerTest {
           tabletLocs.put(tabletMigration.tablet, tabletMigration.newServer);
         }
 
-        if (migrationsOut.size() == 0) {
+        if (migrationsOut.isEmpty()) {
           break;
         }
       }

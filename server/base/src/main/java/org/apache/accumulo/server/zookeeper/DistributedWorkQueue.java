@@ -63,7 +63,7 @@ public class DistributedWorkQueue {
   private AtomicInteger numTask = new AtomicInteger(0);
 
   private void lookForWork(final Processor processor, List<String> children) {
-    if (children.size() == 0)
+    if (children.isEmpty())
       return;
 
     if (numTask.get() >= threadPool.getCorePoolSize())
@@ -207,10 +207,11 @@ public class DistributedWorkQueue {
           case NodeCreated:
           case NodeDataChanged:
           case NodeDeleted:
+          case ChildWatchRemoved:
+          case DataWatchRemoved:
           case None:
             log.info("Got unexpected zookeeper event: {} for {}", event.getType(), path);
             break;
-
         }
       }
     });
@@ -270,10 +271,11 @@ public class DistributedWorkQueue {
           case NodeCreated:
           case NodeDataChanged:
           case NodeDeleted:
+          case ChildWatchRemoved:
+          case DataWatchRemoved:
           case None:
             log.info("Got unexpected zookeeper event: {} for {}", event.getType(), path);
             break;
-
         }
       }
     };

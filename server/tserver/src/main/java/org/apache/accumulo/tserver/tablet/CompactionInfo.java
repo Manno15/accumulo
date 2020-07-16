@@ -24,9 +24,10 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.accumulo.core.client.IteratorSetting;
+import org.apache.accumulo.core.clientImpl.Translator;
+import org.apache.accumulo.core.clientImpl.Translators;
 import org.apache.accumulo.core.dataImpl.KeyExtent;
 import org.apache.accumulo.core.dataImpl.thrift.IterInfo;
-import org.apache.accumulo.core.metadata.TabletFile;
 import org.apache.accumulo.core.tabletserver.thrift.ActiveCompaction;
 import org.apache.accumulo.core.tabletserver.thrift.CompactionReason;
 import org.apache.accumulo.core.tabletserver.thrift.CompactionType;
@@ -74,7 +75,7 @@ public class CompactionInfo {
     CompactionType type;
 
     if (compactor.hasIMM())
-      if (compactor.getFilesToCompact().size() > 0)
+      if (!compactor.getFilesToCompact().isEmpty())
         type = CompactionType.MERGE;
       else
         type = CompactionType.MINOR;
@@ -106,10 +107,8 @@ public class CompactionInfo {
         case CHOP:
           reason = CompactionReason.CHOP;
           break;
-        case IDLE:
-          reason = CompactionReason.IDLE;
-          break;
-        case NORMAL:
+        case SELECTOR:
+        case SYSTEM:
         default:
           reason = CompactionReason.SYSTEM;
           break;
@@ -124,12 +123,9 @@ public class CompactionInfo {
           iterSetting.getName()));
       iterOptions.put(iterSetting.getName(), iterSetting.getOptions());
     }
-    List<String> filesToCompact = new ArrayList<>();
-    for (TabletFile file : compactor.getFilesToCompact())
-      filesToCompact.add(file.getNormalizedPath());
+    List<String> files = Translator.translate(compactor.getFilesToCompact(), Translators.STFT);
     return new ActiveCompaction(compactor.extent.toThrift(),
-        System.currentTimeMillis() - compactor.getStartTime(), filesToCompact,
-        compactor.getOutputFile(), type, reason, localityGroup, entriesRead, entriesWritten, iiList,
-        iterOptions);
+        System.currentTimeMillis() - compactor.getStartTime(), files, compactor.getOutputFile(),
+        type, reason, localityGroup, entriesRead, entriesWritten, iiList, iterOptions);
   }
 }

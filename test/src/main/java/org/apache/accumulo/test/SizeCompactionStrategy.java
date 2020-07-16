@@ -21,12 +21,13 @@ package org.apache.accumulo.test;
 import java.util.Map;
 import java.util.Map.Entry;
 
-import org.apache.accumulo.core.metadata.TabletFile;
+import org.apache.accumulo.core.metadata.StoredTabletFile;
 import org.apache.accumulo.core.metadata.schema.DataFileValue;
 import org.apache.accumulo.tserver.compaction.CompactionPlan;
 import org.apache.accumulo.tserver.compaction.CompactionStrategy;
 import org.apache.accumulo.tserver.compaction.MajorCompactionRequest;
 
+@SuppressWarnings("removal")
 public class SizeCompactionStrategy extends CompactionStrategy {
 
   private long size = 0;
@@ -50,7 +51,7 @@ public class SizeCompactionStrategy extends CompactionStrategy {
   public CompactionPlan getCompactionPlan(MajorCompactionRequest request) {
     CompactionPlan plan = new CompactionPlan();
 
-    for (Entry<TabletFile,DataFileValue> entry : request.getFiles().entrySet())
+    for (Entry<StoredTabletFile,DataFileValue> entry : request.getFiles().entrySet())
       if (entry.getValue().getSize() < size)
         plan.inputFiles.add(entry.getKey());
 

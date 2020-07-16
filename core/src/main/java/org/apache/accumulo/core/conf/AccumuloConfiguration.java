@@ -43,6 +43,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
 
 /**
  * A configuration object.
@@ -198,6 +199,16 @@ public abstract class AccumuloConfiguration implements Iterable<Entry<String,Str
     return prefixProps.props;
   }
 
+  public Map<String,String> getAllPropertiesWithPrefixStripped(Property prefix) {
+    var builder = ImmutableMap.<String,String>builder();
+    getAllPropertiesWithPrefix(prefix).forEach((k, v) -> {
+      String optKey = k.substring(prefix.getKey().length());
+      builder.put(optKey, v);
+    });
+
+    return builder.build();
+  }
+
   /**
    * Gets a property of type {@link PropertyType#BYTES} or {@link PropertyType#MEMORY}, interpreting
    * the value properly.
@@ -291,15 +302,15 @@ public abstract class AccumuloConfiguration implements Iterable<Entry<String,Str
       ports = new int[1];
       try {
         int port = Integer.parseInt(portString);
-        if (port != 0) {
+        if (port == 0) {
+          ports[0] = port;
+        } else {
           if (port < 1024 || port > 65535) {
             log.error("Invalid port number {}; Using default {}", port, property.getDefaultValue());
             ports[0] = Integer.parseInt(property.getDefaultValue());
           } else {
             ports[0] = port;
           }
-        } else {
-          ports[0] = port;
         }
       } catch (NumberFormatException e1) {
         throw new IllegalArgumentException("Invalid port syntax. Must be a single positive "

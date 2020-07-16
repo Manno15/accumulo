@@ -89,15 +89,15 @@ class LoadFiles extends MasterRepo {
 
   @Override
   public long isReady(long tid, Master master) throws Exception {
-    if (master.onlineTabletServers().size() == 0) {
+    if (master.onlineTabletServers().isEmpty()) {
       log.warn("There are no tablet server to process bulkDir import, waiting (tid = "
           + FateTxId.formatTid(tid) + ")");
       return 100;
     }
-    VolumeManager fs = master.getFileSystem();
+    VolumeManager fs = master.getVolumeManager();
     final Path bulkDir = new Path(bulkInfo.bulkDir);
-    try (LoadMappingIterator lmi = BulkSerialize.getUpdatedLoadMapping(bulkDir.toString(),
-        bulkInfo.tableId, p -> fs.open(p))) {
+    try (LoadMappingIterator lmi =
+        BulkSerialize.getUpdatedLoadMapping(bulkDir.toString(), bulkInfo.tableId, fs::open)) {
       return loadFiles(bulkInfo.tableId, bulkDir, lmi, master, tid);
     }
   }
@@ -220,7 +220,7 @@ class LoadFiles extends MasterRepo {
 
         for (final Bulk.FileInfo fileInfo : files) {
           Path fullPath = new Path(bulkDir, fileInfo.getFileName());
-          TabletFile bulkFile = new TabletFile(fullPath, fullPath.toString());
+          TabletFile bulkFile = new TabletFile(fullPath);
 
           if (!loadedFiles.contains(bulkFile)) {
             thriftImports.put(fileInfo.getFileName(), new MapFileInfo(fileInfo.getEstFileSize()));

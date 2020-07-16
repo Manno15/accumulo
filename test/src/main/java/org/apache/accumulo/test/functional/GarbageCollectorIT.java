@@ -147,11 +147,11 @@ public class GarbageCollectorIT extends ConfigurableMacBase {
     log.info("Filling metadata table with bogus delete flags");
     try (AccumuloClient c = Accumulo.newClient().from(getClientProperties()).build()) {
       addEntries(c);
-      cluster.getConfig().setDefaultMemory(16, MemoryUnit.MEGABYTE);
+      cluster.getConfig().setDefaultMemory(32, MemoryUnit.MEGABYTE);
       ProcessInfo gc = cluster.exec(SimpleGarbageCollector.class);
       sleepUninterruptibly(20, TimeUnit.SECONDS);
       String output = "";
-      while (!output.contains("delete candidates has exceeded")) {
+      while (!output.contains("has exceeded the threshold")) {
         try {
           output = gc.readStdOut();
         } catch (UncheckedIOException ex) {
@@ -160,7 +160,7 @@ public class GarbageCollectorIT extends ConfigurableMacBase {
         }
       }
       gc.getProcess().destroy();
-      assertTrue(output.contains("delete candidates has exceeded"));
+      assertTrue(output.contains("has exceeded the threshold"));
     }
   }
 
@@ -268,7 +268,7 @@ public class GarbageCollectorIT extends ConfigurableMacBase {
           continue;
         }
 
-        if (locks != null && locks.size() > 0) {
+        if (locks != null && !locks.isEmpty()) {
           Collections.sort(locks);
 
           String lockPath = path + "/" + locks.get(0);

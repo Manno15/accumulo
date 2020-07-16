@@ -214,9 +214,9 @@ public class Gatherer {
 
         // When no location, the approach below will consistently choose the same tserver for the
         // same file (as long as the set of tservers is stable).
-        int idx = Math
-            .abs(Hashing.murmur3_32().hashString(entry.getKey().getNormalizedPath(), UTF_8).asInt())
-            % tservers.size();
+        int idx =
+            Math.abs(Hashing.murmur3_32().hashString(entry.getKey().getPathStr(), UTF_8).asInt())
+                % tservers.size();
         location = tservers.get(idx);
       }
 
@@ -245,7 +245,7 @@ public class Gatherer {
     return () -> {
       Iterator<Entry<K,V>> esi = map.entrySet().iterator();
 
-      return new Iterator<Map<K,V>>() {
+      return new Iterator<>() {
         @Override
         public boolean hasNext() {
           return esi.hasNext();
@@ -312,7 +312,7 @@ public class Gatherer {
         client = ThriftUtil.getTServerClient(location, ctx);
         // partition files into smaller chunks so that not too many are sent to a tserver at once
         for (Map<TabletFile,List<TRowRange>> files : partition(allFiles, 500)) {
-          if (pfiles.failedFiles.size() > 0) {
+          if (!pfiles.failedFiles.isEmpty()) {
             // there was a previous failure on this tserver, so just fail the rest of the files
             pfiles.failedFiles.addAll(files.keySet());
             continue;
@@ -368,9 +368,9 @@ public class Gatherer {
 
     private synchronized void initiateProcessing(ProcessedFiles previousWork) {
       try {
-        Predicate<TabletFile> fileSelector = file -> Math
-            .abs(Hashing.murmur3_32().hashString(file.getNormalizedPath(), UTF_8).asInt()) % modulus
-            == remainder;
+        Predicate<TabletFile> fileSelector =
+            file -> Math.abs(Hashing.murmur3_32().hashString(file.getPathStr(), UTF_8).asInt())
+                % modulus == remainder;
         if (previousWork != null) {
           fileSelector = fileSelector.and(previousWork.failedFiles::contains);
         }
@@ -419,7 +419,7 @@ public class Gatherer {
       if (future.isDone()) {
         if (!future.isCancelled() && !future.isCompletedExceptionally()) {
           ProcessedFiles pf = _get();
-          if (pf.failedFiles.size() > 0) {
+          if (!pf.failedFiles.isEmpty()) {
             initiateProcessing(pf);
           }
         }
@@ -456,7 +456,7 @@ public class Gatherer {
         }
 
         ProcessedFiles pf = _get();
-        if (pf.failedFiles.size() == 0) {
+        if (pf.failedFiles.isEmpty()) {
           return true;
         } else {
           updateFuture();
@@ -470,7 +470,7 @@ public class Gatherer {
     public SummaryCollection get() throws InterruptedException, ExecutionException {
       CompletableFuture<ProcessedFiles> futureRef = updateFuture();
       ProcessedFiles processedFiles = futureRef.get();
-      while (processedFiles.failedFiles.size() > 0) {
+      while (!processedFiles.failedFiles.isEmpty()) {
         futureRef = updateFuture();
         processedFiles = futureRef.get();
       }
@@ -487,7 +487,7 @@ public class Gatherer {
       ProcessedFiles processedFiles = futureRef.get(Long.max(1, nanosLeft), TimeUnit.NANOSECONDS);
       t2 = System.nanoTime();
       nanosLeft -= (t2 - t1);
-      while (processedFiles.failedFiles.size() > 0) {
+      while (!processedFiles.failedFiles.isEmpty()) {
         futureRef = updateFuture();
         t1 = System.nanoTime();
         processedFiles = futureRef.get(Long.max(1, nanosLeft), TimeUnit.NANOSECONDS);

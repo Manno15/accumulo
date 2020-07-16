@@ -18,6 +18,8 @@
  */
 package org.apache.accumulo.master;
 
+import static org.apache.accumulo.core.Constants.MAX_NAMESPACE_LEN;
+import static org.apache.accumulo.core.Constants.MAX_TABLE_NAME_LEN;
 import static org.apache.accumulo.master.util.TableValidators.CAN_CLONE;
 import static org.apache.accumulo.master.util.TableValidators.NOT_METADATA;
 import static org.apache.accumulo.master.util.TableValidators.NOT_ROOT_ID;
@@ -34,18 +36,18 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.apache.accumulo.core.client.AccumuloSecurityException;
-import org.apache.accumulo.core.client.IteratorSetting;
 import org.apache.accumulo.core.client.NamespaceNotFoundException;
 import org.apache.accumulo.core.client.TableNotFoundException;
-import org.apache.accumulo.core.client.admin.CompactionStrategyConfig;
+import org.apache.accumulo.core.client.admin.CompactionConfig;
 import org.apache.accumulo.core.client.admin.InitialTableState;
 import org.apache.accumulo.core.client.admin.TimeType;
-import org.apache.accumulo.core.clientImpl.CompactionStrategyConfigUtil;
 import org.apache.accumulo.core.clientImpl.Namespaces;
 import org.apache.accumulo.core.clientImpl.TableOperationsImpl;
 import org.apache.accumulo.core.clientImpl.Tables;
+import org.apache.accumulo.core.clientImpl.UserCompactionUtils;
 import org.apache.accumulo.core.clientImpl.thrift.SecurityErrorCode;
 import org.apache.accumulo.core.clientImpl.thrift.TableOperation;
 import org.apache.accumulo.core.clientImpl.thrift.TableOperationExceptionType;
@@ -53,7 +55,6 @@ import org.apache.accumulo.core.clientImpl.thrift.ThriftSecurityException;
 import org.apache.accumulo.core.clientImpl.thrift.ThriftTableOperationException;
 import org.apache.accumulo.core.data.NamespaceId;
 import org.apache.accumulo.core.data.TableId;
-import org.apache.accumulo.core.iteratorsImpl.system.SystemIteratorUtil;
 import org.apache.accumulo.core.master.thrift.BulkImportState;
 import org.apache.accumulo.core.master.thrift.FateOperation;
 import org.apache.accumulo.core.master.thrift.FateService;
@@ -113,7 +114,7 @@ class FateServiceHandler implements FateService.Iface {
       case NAMESPACE_CREATE: {
         TableOperation tableOp = TableOperation.CREATE;
         validateArgumentCount(arguments, tableOp, 1);
-        String namespace = validateNamespaceArgument(arguments.get(0), tableOp, null);
+        String namespace = validateNewNamespaceArgument(arguments.get(0), tableOp, null);
 
         if (!master.security.canCreateNamespace(c))
           throw new ThriftSecurityException(c.getPrincipal(), SecurityErrorCode.PERMISSION_DENIED);
@@ -128,7 +129,7 @@ class FateServiceHandler implements FateService.Iface {
         validateArgumentCount(arguments, tableOp, 2);
         String oldName = validateNamespaceArgument(arguments.get(0), tableOp,
             Namespaces.NOT_DEFAULT.and(Namespaces.NOT_ACCUMULO));
-        String newName = validateNamespaceArgument(arguments.get(1), tableOp, null);
+        String newName = validateNewNamespaceArgument(arguments.get(1), tableOp, null);
 
         NamespaceId namespaceId =
             ClientServiceHandler.checkNamespaceId(master.getContext(), oldName, tableOp);
@@ -162,7 +163,7 @@ class FateServiceHandler implements FateService.Iface {
               TableOperationExceptionType.OTHER,
               "Expected at least " + SPLIT_OFFSET + " arguments, saw :" + arguments.size());
         }
-        String tableName = validateTableNameArgument(arguments.get(0), tableOp, NOT_SYSTEM);
+        String tableName = validateNewTableNameArgument(arguments.get(0), tableOp, NOT_SYSTEM);
         TimeType timeType = TimeType.valueOf(ByteBufferUtil.toString(arguments.get(1)));
         InitialTableState initialTableState =
             InitialTableState.valueOf(ByteBufferUtil.toString(arguments.get(2)));
@@ -206,7 +207,8 @@ class FateServiceHandler implements FateService.Iface {
         final String oldTableName =
             validateTableNameArgument(arguments.get(0), tableOp, NOT_SYSTEM);
         String newTableName =
-            validateTableNameArgument(arguments.get(1), tableOp, new Validator<String>() {
+
+            validateNewTableNameArgument(arguments.get(1), tableOp, new Validator<>() {
 
               @Override
               public boolean test(String argument) {
@@ -254,7 +256,7 @@ class FateServiceHandler implements FateService.Iface {
         TableOperation tableOp = TableOperation.CLONE;
         validateArgumentCount(arguments, tableOp, 3);
         TableId srcTableId = validateTableIdArgument(arguments.get(0), tableOp, CAN_CLONE);
-        String tableName = validateTableNameArgument(arguments.get(1), tableOp, NOT_SYSTEM);
+        String tableName = validateNewTableNameArgument(arguments.get(1), tableOp, NOT_SYSTEM);
         boolean keepOffline = false;
         if (arguments.get(2) != null) {
           keepOffline = Boolean.parseBoolean(ByteBufferUtil.toString(arguments.get(2)));
@@ -463,14 +465,10 @@ class FateServiceHandler implements FateService.Iface {
       }
       case TABLE_COMPACT: {
         TableOperation tableOp = TableOperation.COMPACT;
-        validateArgumentCount(arguments, tableOp, 5);
+        validateArgumentCount(arguments, tableOp, 2);
         TableId tableId = validateTableIdArgument(arguments.get(0), tableOp, null);
-        byte[] startRow = ByteBufferUtil.toBytes(arguments.get(1));
-        byte[] endRow = ByteBufferUtil.toBytes(arguments.get(2));
-        List<IteratorSetting> iterators =
-            SystemIteratorUtil.decodeIteratorSettings(ByteBufferUtil.toBytes(arguments.get(3)));
-        CompactionStrategyConfig compactionStrategy =
-            CompactionStrategyConfigUtil.decode(ByteBufferUtil.toBytes(arguments.get(4)));
+        CompactionConfig compactionConfig =
+            UserCompactionUtils.decodeCompactionConfig(ByteBufferUtil.toBytes(arguments.get(1)));
         NamespaceId namespaceId = getNamespaceIdFromTableId(tableOp, tableId);
 
         final boolean canCompact;
@@ -484,8 +482,8 @@ class FateServiceHandler implements FateService.Iface {
         if (!canCompact)
           throw new ThriftSecurityException(c.getPrincipal(), SecurityErrorCode.PERMISSION_DENIED);
 
-        master.fate.seedTransaction(opid, new TraceRepo<>(new CompactRange(namespaceId, tableId,
-            startRow, endRow, iterators, compactionStrategy)), autoCleanup);
+        master.fate.seedTransaction(opid,
+            new TraceRepo<>(new CompactRange(namespaceId, tableId, compactionConfig)), autoCleanup);
         break;
       }
       case TABLE_CANCEL_COMPACT: {
@@ -511,9 +509,15 @@ class FateServiceHandler implements FateService.Iface {
       }
       case TABLE_IMPORT: {
         TableOperation tableOp = TableOperation.IMPORT;
-        validateArgumentCount(arguments, tableOp, 2);
-        String tableName = validateTableNameArgument(arguments.get(0), tableOp, NOT_SYSTEM);
-        String exportDir = ByteBufferUtil.toString(arguments.get(1));
+        int IMPORT_DIR_OFFSET = 2; // offset where table list begins
+        if (arguments.size() < IMPORT_DIR_OFFSET) {
+          throw new ThriftTableOperationException(null, null, tableOp,
+              TableOperationExceptionType.OTHER,
+              "Expected at least " + IMPORT_DIR_OFFSET + "arguments, sar :" + arguments.size());
+        }
+        String tableName = validateNewTableNameArgument(arguments.get(0), tableOp, NOT_SYSTEM);
+        List<ByteBuffer> exportDirArgs = arguments.stream().skip(1).collect(Collectors.toList());
+        Set<String> exportDirs = ByteBufferUtil.toStringSet(exportDirArgs);
         NamespaceId namespaceId;
         try {
           namespaceId =
@@ -525,7 +529,7 @@ class FateServiceHandler implements FateService.Iface {
 
         final boolean canImport;
         try {
-          canImport = master.security.canImport(c, tableName, exportDir, namespaceId);
+          canImport = master.security.canImport(c, tableName, exportDirs, namespaceId);
         } catch (ThriftSecurityException e) {
           throwIfTableMissingSecurityException(e, null, tableName, TableOperation.IMPORT);
           throw e;
@@ -535,7 +539,7 @@ class FateServiceHandler implements FateService.Iface {
           throw new ThriftSecurityException(c.getPrincipal(), SecurityErrorCode.PERMISSION_DENIED);
 
         master.fate.seedTransaction(opid,
-            new TraceRepo<>(new ImportTable(c.getPrincipal(), tableName, exportDir, namespaceId)),
+            new TraceRepo<>(new ImportTable(c.getPrincipal(), tableName, exportDirs, namespaceId)),
             autoCleanup);
         break;
       }
@@ -697,10 +701,29 @@ class FateServiceHandler implements FateService.Iface {
     }
   }
 
-  // Verify table name arguments are valid, and match any additional restrictions
+  // Verify existing table's name argument is valid, and match any additional restrictions
   private String validateTableNameArgument(ByteBuffer tableNameArg, TableOperation op,
       Validator<String> userValidator) throws ThriftTableOperationException {
     String tableName = tableNameArg == null ? null : ByteBufferUtil.toString(tableNameArg);
+    if ((tableName != null) && (tableName.length() > MAX_TABLE_NAME_LEN)) {
+      log.warn("Table names greater than " + MAX_TABLE_NAME_LEN
+          + " characters should be renamed to conform to a " + MAX_TABLE_NAME_LEN
+          + " character limit. Longer table names are no longer supported and may result in "
+          + " unexpected behavior.");
+    }
+    return _validateArgument(tableName, op, VALID_NAME.and(userValidator));
+  }
+
+  // Verify table name arguments are valid, and match any additional restrictions
+  private String validateNewTableNameArgument(ByteBuffer tableNameArg, TableOperation op,
+      Validator<String> userValidator) throws ThriftTableOperationException {
+    String tableName = tableNameArg == null ? null : ByteBufferUtil.toString(tableNameArg);
+    if ((tableName != null) && (tableName.length() > MAX_TABLE_NAME_LEN)) {
+      throw new ThriftTableOperationException(null, tableName, op,
+          TableOperationExceptionType.INVALID_NAME,
+          "Table names must be less than or equal to " + MAX_TABLE_NAME_LEN + " characters. " + "'"
+              + tableName + "' is " + tableName.length() + " characters long.");
+    }
     return _validateArgument(tableName, op, VALID_NAME.and(userValidator));
   }
 
@@ -716,6 +739,25 @@ class FateServiceHandler implements FateService.Iface {
   private String validateNamespaceArgument(ByteBuffer namespaceArg, TableOperation op,
       Validator<String> userValidator) throws ThriftTableOperationException {
     String namespace = namespaceArg == null ? null : ByteBufferUtil.toString(namespaceArg);
+    if ((namespace != null) && (namespace.length() > MAX_NAMESPACE_LEN)) {
+      log.warn("Namespaces greater than " + MAX_NAMESPACE_LEN
+          + " characters should be renamed to conform to a " + MAX_NAMESPACE_LEN
+          + " character limit. "
+          + "Longer namespaces are no longer supported and may result in unexpected behavior.");
+    }
+    return _validateArgument(namespace, op, Namespaces.VALID_NAME.and(userValidator));
+  }
+
+  // Verify namespace arguments are valid, and match any additional restrictions
+  private String validateNewNamespaceArgument(ByteBuffer namespaceArg, TableOperation op,
+      Validator<String> userValidator) throws ThriftTableOperationException {
+    String namespace = namespaceArg == null ? null : ByteBufferUtil.toString(namespaceArg);
+    if ((namespace != null) && (namespace.length() > MAX_NAMESPACE_LEN)) {
+      throw new ThriftTableOperationException(null, namespace, op,
+          TableOperationExceptionType.INVALID_NAME,
+          "Namespaces must be less than or equal to " + MAX_NAMESPACE_LEN + " characters. " + "'"
+              + namespace + "' is " + namespace.length() + " characters long.");
+    }
     return _validateArgument(namespace, op, Namespaces.VALID_NAME.and(userValidator));
   }
 
@@ -757,7 +799,7 @@ class FateServiceHandler implements FateService.Iface {
    * failure and/or FateServiceHandler retries.
    */
   private void removeAndCreateTempFile(String path) throws IOException {
-    FileSystem fs = master.getFileSystem().getDefaultVolume().getFileSystem();
+    FileSystem fs = master.getVolumeManager().getDefaultVolume().getFileSystem();
     if (fs.exists(new Path(path)))
       fs.delete(new Path(path), true);
     fs.create(new Path(path));
@@ -793,7 +835,7 @@ class FateServiceHandler implements FateService.Iface {
    * Get full path to location where initial splits are stored on file system.
    */
   private String getSplitPath(String relPath) {
-    Volume defaultVolume = master.getFileSystem().getDefaultVolume();
+    Volume defaultVolume = master.getVolumeManager().getDefaultVolume();
     String uri = defaultVolume.getFileSystem().getUri().toString();
     String basePath = defaultVolume.getBasePath();
     return uri + basePath + relPath;

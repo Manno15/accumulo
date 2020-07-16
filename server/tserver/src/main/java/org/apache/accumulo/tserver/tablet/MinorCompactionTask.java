@@ -24,7 +24,7 @@ import org.apache.accumulo.core.metadata.TabletFile;
 import org.apache.accumulo.core.metadata.schema.DataFileValue;
 import org.apache.accumulo.core.trace.TraceUtil;
 import org.apache.accumulo.tserver.MinorCompactionReason;
-import org.apache.accumulo.tserver.compaction.MajorCompactionReason;
+import org.apache.hadoop.fs.Path;
 import org.apache.htrace.Trace;
 import org.apache.htrace.TraceScope;
 import org.apache.htrace.impl.ProbabilitySampler;
@@ -39,18 +39,16 @@ class MinorCompactionTask implements Runnable {
   private long queued;
   private CommitSession commitSession;
   private DataFileValue stats;
-  private TabletFile mergeFile;
   private long flushId;
   private MinorCompactionReason mincReason;
   private double tracePercent;
 
-  MinorCompactionTask(Tablet tablet, TabletFile mergeFile, CommitSession commitSession,
-      long flushId, MinorCompactionReason mincReason, double tracePercent) {
+  MinorCompactionTask(Tablet tablet, CommitSession commitSession, long flushId,
+      MinorCompactionReason mincReason, double tracePercent) {
     this.tablet = tablet;
     queued = System.currentTimeMillis();
     tablet.minorCompactionWaitingToStart();
     this.commitSession = commitSession;
-    this.mergeFile = mergeFile;
     this.flushId = flushId;
     this.mincReason = mincReason;
     this.tracePercent = tracePercent;
@@ -62,8 +60,8 @@ class MinorCompactionTask implements Runnable {
     ProbabilitySampler sampler = TraceUtil.probabilitySampler(tracePercent);
     try {
       try (TraceScope minorCompaction = Trace.startSpan("minorCompaction", sampler)) {
-        TabletFile newMapfileLocation = tablet.getNextMapFilename(mergeFile == null ? "F" : "M");
-        TabletFile tmpFile = new TabletFile(newMapfileLocation.getMetadataEntry() + "_tmp");
+        TabletFile newFile = tablet.getNextMapFilename("F");
+        TabletFile tmpFile = new TabletFile(new Path(newFile.getPathStr() + "_tmp"));
         try (TraceScope span = Trace.startSpan("waitForCommits")) {
           synchronized (tablet) {
             commitSession.waitForCommitsToFinish();
@@ -81,7 +79,7 @@ class MinorCompactionTask implements Runnable {
                * for the minor compaction
                */
               tablet.getTabletServer().minorCompactionStarted(commitSession,
-                  commitSession.getWALogSeq() + 1, newMapfileLocation.getMetadataEntry());
+                  commitSession.getWALogSeq() + 1, newFile.getMetaInsert());
               break;
             } catch (IOException e) {
               log.warn("Failed to write to write ahead log {}", e.getMessage(), e);
@@ -90,7 +88,7 @@ class MinorCompactionTask implements Runnable {
         }
         try (TraceScope span = Trace.startSpan("compact")) {
           this.stats = tablet.minorCompact(tablet.getTabletMemory().getMinCMemTable(), tmpFile,
-              newMapfileLocation, mergeFile, queued, commitSession, flushId, mincReason);
+              newFile, queued, commitSession, flushId, mincReason);
         }
 
         if (minorCompaction.getSpan() != null) {
@@ -103,8 +101,6 @@ class MinorCompactionTask implements Runnable {
 
       if (tablet.needsSplit()) {
         tablet.getTabletServer().executeSplit(tablet);
-      } else {
-        tablet.initiateMajorCompaction(MajorCompactionReason.NORMAL);
       }
     } catch (Throwable t) {
       log.error("Unknown error during minor compaction for extent: " + tablet.getExtent(), t);

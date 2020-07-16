@@ -93,12 +93,12 @@ import org.apache.accumulo.master.replication.MasterReplicationCoordinator;
 import org.apache.accumulo.master.replication.ReplicationDriver;
 import org.apache.accumulo.master.replication.WorkDriver;
 import org.apache.accumulo.master.state.TableCounts;
+import org.apache.accumulo.master.tableOps.TraceRepo;
 import org.apache.accumulo.master.upgrade.UpgradeCoordinator;
 import org.apache.accumulo.server.AbstractServer;
 import org.apache.accumulo.server.HighlyAvailableService;
 import org.apache.accumulo.server.ServerContext;
 import org.apache.accumulo.server.ServerOpts;
-import org.apache.accumulo.server.conf.ServerConfigurationFactory;
 import org.apache.accumulo.server.fs.VolumeManager;
 import org.apache.accumulo.server.log.WalStateManager;
 import org.apache.accumulo.server.log.WalStateManager.WalMarkerException;
@@ -137,7 +137,6 @@ import org.apache.accumulo.start.classloader.vfs.AccumuloVFSClassLoader;
 import org.apache.accumulo.start.classloader.vfs.ContextManager;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
-import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.DataInputBuffer;
 import org.apache.hadoop.io.DataOutputBuffer;
@@ -180,13 +179,12 @@ public class Master extends AbstractServer
   private static final int MAX_BAD_STATUS_COUNT = 3;
   private static final double MAX_SHUTDOWNS_PER_SEC = 10D / 60D;
 
-  final VolumeManager fs;
   private final Object balancedNotifier = new Object();
   final LiveTServerSet tserverSet;
   private final List<TabletGroupWatcher> watchers = new ArrayList<>();
   final SecurityOperation security;
   final Map<TServerInstance,AtomicInteger> badServers =
-      Collections.synchronizedMap(new HashMap<TServerInstance,AtomicInteger>());
+      Collections.synchronizedMap(new HashMap<>());
   final Set<TServerInstance> serversToShutdown = Collections.synchronizedSet(new HashSet<>());
   final SortedMap<KeyExtent,TServerInstance> migrations =
       Collections.synchronizedSortedMap(new TreeMap<>());
@@ -275,8 +273,6 @@ public class Master extends AbstractServer
   private final UpgradeCoordinator upgradeCoordinator = new UpgradeCoordinator();
 
   private Future<Void> upgradeMetadataFuture;
-
-  private final ServerConfigurationFactory serverConfig;
 
   private MasterClientServiceHandler clientHandler;
 
@@ -375,10 +371,8 @@ public class Master extends AbstractServer
   Master(ServerOpts opts, String[] args) throws IOException {
     super("master", opts, args);
     ServerContext context = super.getContext();
-    this.serverConfig = context.getServerConfFactory();
-    this.fs = context.getVolumeManager();
 
-    AccumuloConfiguration aconf = serverConfig.getSystemConfiguration();
+    AccumuloConfiguration aconf = context.getConfiguration();
 
     log.info("Version {}", Constants.VERSION);
     log.info("Instance {}", getInstanceID());
@@ -797,7 +791,7 @@ public class Master extends AbstractServer
                         tserverSet.remove(server);
                       }
                     }
-                    if (currentServers.size() == 0) {
+                    if (currentServers.isEmpty()) {
                       setMasterState(MasterState.STOP);
                     }
                   }
@@ -890,13 +884,13 @@ public class Master extends AbstractServer
         migrations.put(m.tablet, m.newServer);
         log.debug("migration {}", m);
       }
-      if (migrationsOut.size() > 0) {
-        nextEvent.event("Migrating %d more tablets, %d total", migrationsOut.size(),
-            migrations.size());
-      } else {
+      if (migrationsOut.isEmpty()) {
         synchronized (balancedNotifier) {
           balancedNotifier.notifyAll();
         }
+      } else {
+        nextEvent.event("Migrating %d more tablets, %d total", migrationsOut.size(),
+            migrations.size());
       }
       return wait;
     }
@@ -1018,8 +1012,8 @@ public class Master extends AbstractServer
     try {
       sa = TServerUtils.startServer(getMetricsSystem(), context, getHostname(),
           Property.MASTER_CLIENTPORT, processor, "Master", "Master Client Service Handler", null,
-          Property.MASTER_MINTHREADS, Property.MASTER_THREADCHECK,
-          Property.GENERAL_MAX_MESSAGE_SIZE);
+          Property.MASTER_MINTHREADS, Property.MASTER_MINTHREADS_TIMEOUT,
+          Property.MASTER_THREADCHECK, Property.GENERAL_MAX_MESSAGE_SIZE);
     } catch (UnknownHostException e) {
       throw new IllegalStateException("Unable to start server on host " + getHostname(), e);
     }
@@ -1117,10 +1111,10 @@ public class Master extends AbstractServer
 
       int threads = getConfiguration().getCount(Property.MASTER_FATE_THREADPOOL_SIZE);
 
-      fate = new Fate<>(this, store);
+      fate = new Fate<>(this, store, TraceRepo::toLogString);
       fate.startTransactionRunners(threads);
 
-      SimpleTimer.getInstance(getConfiguration()).schedule(() -> store.ageOff(), 63000, 63000);
+      SimpleTimer.getInstance(getConfiguration()).schedule(store::ageOff, 63000, 63000);
     } catch (KeeperException | InterruptedException e) {
       throw new IllegalStateException("Exception setting up FaTE cleanup thread", e);
     }
@@ -1335,7 +1329,7 @@ public class Master extends AbstractServer
     ServerAddress replAddress = TServerUtils.startServer(getMetricsSystem(), context, getHostname(),
         Property.MASTER_REPLICATION_COORDINATOR_PORT, replicationCoordinatorProcessor,
         "Master Replication Coordinator", "Replication Coordinator", null,
-        Property.MASTER_REPLICATION_COORDINATOR_MINTHREADS,
+        Property.MASTER_REPLICATION_COORDINATOR_MINTHREADS, null,
         Property.MASTER_REPLICATION_COORDINATOR_THREADCHECK, Property.GENERAL_MAX_MESSAGE_SIZE);
 
     log.info("Started replication coordinator service at " + replAddress.address);
@@ -1457,7 +1451,7 @@ public class Master extends AbstractServer
     if (!deleted.isEmpty() || !added.isEmpty()) {
       DeadServerList obit =
           new DeadServerList(getContext(), getZooKeeperRoot() + Constants.ZDEADTSERVERS);
-      if (added.size() > 0) {
+      if (!added.isEmpty()) {
         log.info("New servers: {}", added);
         for (TServerInstance up : added) {
           obit.delete(up.hostPort());
@@ -1475,7 +1469,7 @@ public class Master extends AbstractServer
 
       Set<TServerInstance> unexpected = new HashSet<>(deleted);
       unexpected.removeAll(this.serversToShutdown);
-      if (unexpected.size() > 0) {
+      if (!unexpected.isEmpty()) {
         if (stillMaster() && !getMasterGoalState().equals(MasterGoalState.CLEAN_STOP)) {
           log.warn("Lost servers {}", unexpected);
         }
@@ -1593,12 +1587,8 @@ public class Master extends AbstractServer
     return nextEvent;
   }
 
-  public ServerConfigurationFactory getConfigurationFactory() {
-    return serverConfig;
-  }
-
-  public VolumeManager getFileSystem() {
-    return this.fs;
+  public VolumeManager getVolumeManager() {
+    return getContext().getVolumeManager();
   }
 
   public void assignedTablet(KeyExtent extent) {
@@ -1626,7 +1616,7 @@ public class Master extends AbstractServer
         } catch (InterruptedException e) {
           log.debug(e.toString(), e);
         }
-      } while (displayUnassigned() > 0 || migrations.size() > 0
+      } while (displayUnassigned() > 0 || !migrations.isEmpty()
           || eventCounter != nextEvent.waitForEvents(0, 0));
     }
   }
@@ -1635,7 +1625,7 @@ public class Master extends AbstractServer
     final MasterMonitorInfo result = new MasterMonitorInfo();
 
     result.tServerInfo = new ArrayList<>();
-    result.tableMap = new HashMap<String,TableInfo>();
+    result.tableMap = new HashMap<>();
     for (Entry<TServerInstance,TabletServerStatus> serverEntry : tserverStatus.entrySet()) {
       final TabletServerStatus status = serverEntry.getValue();
       result.tServerInfo.add(status);
@@ -1722,13 +1712,11 @@ public class Master extends AbstractServer
   }
 
   public FSDataOutputStream getOutputStream(final String path) throws IOException {
-    FileSystem fileSystem = fs.getDefaultVolume().getFileSystem();
-    return fileSystem.create(new Path(path));
+    return getVolumeManager().getDefaultVolume().getFileSystem().create(new Path(path));
   }
 
   public FSDataInputStream getInputStream(final String path) throws IOException {
-    FileSystem fileSystem = fs.getDefaultVolume().getFileSystem();
-    return fileSystem.open(new Path(path));
+    return getVolumeManager().getDefaultVolume().getFileSystem().open(new Path(path));
   }
 
 }

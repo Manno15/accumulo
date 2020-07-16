@@ -123,7 +123,7 @@ public class Monitor extends AbstractServer implements HighlyAvailableService {
   private final AtomicBoolean monitorInitialized = new AtomicBoolean(false);
 
   private static <T> List<Pair<Long,T>> newMaxList() {
-    return Collections.synchronizedList(new LinkedList<Pair<Long,T>>() {
+    return Collections.synchronizedList(new LinkedList<>() {
 
       private static final long serialVersionUID = 1L;
       private final long maxDelta = 60 * 60 * 1000;
@@ -393,7 +393,7 @@ public class Monitor extends AbstractServer implements HighlyAvailableService {
       ZooReaderWriter zk = context.getZooReaderWriter();
       String path = context.getZooKeeperRoot() + Constants.ZGC_LOCK;
       List<String> locks = zk.getChildren(path, null);
-      if (locks != null && locks.size() > 0) {
+      if (locks != null && !locks.isEmpty()) {
         Collections.sort(locks);
         address = new ServerServices(new String(zk.getData(path + "/" + locks.get(0), null), UTF_8))
             .getAddress(Service.GC_CLIENT);

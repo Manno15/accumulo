@@ -225,8 +225,7 @@ public class MultiThreadedRFileTest {
       justification = "information put into error message is safe and used for testing")
   @Test
   public void testMultipleReaders() throws IOException {
-    final List<Throwable> threadExceptions =
-        Collections.synchronizedList(new ArrayList<Throwable>());
+    final List<Throwable> threadExceptions = Collections.synchronizedList(new ArrayList<>());
     Map<String,MutableInt> messages = new HashMap<>();
     Map<String,String> stackTrace = new HashMap<>();
 
@@ -276,10 +275,10 @@ public class MultiThreadedRFileTest {
 
       for (Throwable t : threadExceptions) {
         String msg = t.getClass() + " : " + t.getMessage();
-        if (!messages.containsKey(msg)) {
-          messages.put(msg, new MutableInt(1));
-        } else {
+        if (messages.containsKey(msg)) {
           messages.get(msg).increment();
+        } else {
+          messages.put(msg, new MutableInt(1));
         }
         StringWriter string = new StringWriter();
         PrintWriter writer = new PrintWriter(string);

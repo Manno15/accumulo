@@ -20,11 +20,13 @@ package org.apache.accumulo.test;
 
 import java.util.Map;
 
+import org.apache.accumulo.core.metadata.StoredTabletFile;
 import org.apache.accumulo.core.metadata.TabletFile;
 import org.apache.accumulo.tserver.compaction.CompactionPlan;
 import org.apache.accumulo.tserver.compaction.CompactionStrategy;
 import org.apache.accumulo.tserver.compaction.MajorCompactionRequest;
 
+@SuppressWarnings("removal")
 public class TestCompactionStrategy extends CompactionStrategy {
 
   private String inputPrefix = "Z";
@@ -60,7 +62,7 @@ public class TestCompactionStrategy extends CompactionStrategy {
   public CompactionPlan getCompactionPlan(MajorCompactionRequest request) {
     CompactionPlan plan = new CompactionPlan();
 
-    for (TabletFile file : request.getFiles().keySet()) {
+    for (StoredTabletFile file : request.getFiles().keySet()) {
       if (file.getFileName().startsWith(dropPrefix)) {
         plan.deleteFiles.add(file);
       } else if (file.getFileName().startsWith(inputPrefix)) {

@@ -20,6 +20,7 @@ package org.apache.accumulo.tserver;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -65,7 +66,6 @@ import org.apache.hadoop.io.Text;
 import org.easymock.EasyMock;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.rules.TemporaryFolder;
 
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
@@ -95,9 +95,6 @@ public class InMemoryMapTest {
       return sampleConfig;
     }
   }
-
-  @Rule
-  public ExpectedException thrown = ExpectedException.none();
 
   public static ServerContext getServerContext() {
     Configuration hadoopConf = new Configuration();
@@ -593,7 +590,7 @@ public class InMemoryMapTest {
         mutate(imm, row, "cf2:cq2", 5, "v" + ((2 * r) + 1), sampler, expectedSample, expectedAll);
       }
 
-      assertTrue(expectedSample.size() > 0);
+      assertTrue(!expectedSample.isEmpty());
 
       MemoryIterator iter1 = imm.skvIterator(sampleConfig);
       MemoryIterator iter2 = imm.skvIterator(null);
@@ -676,7 +673,7 @@ public class InMemoryMapTest {
       mutate(imm, row, "cf2:cq2", 5, "v" + ((2 * r) + 1), sampler, expectedSample, expectedAll);
     }
 
-    assertTrue(expectedSample.size() > 0);
+    assertTrue(!expectedSample.isEmpty());
 
     MemoryIterator miter = imm.skvIterator(sampleConfig1);
     AtomicBoolean iFlag = new AtomicBoolean(false);
@@ -799,9 +796,9 @@ public class InMemoryMapTest {
     iter.seek(new Range(), LocalityGroupUtil.EMPTY_CF_SET, false);
     assertEquals(expectedAll, readAll(iter));
 
-    iter = imm.skvIterator(sampleConfig1);
-    thrown.expect(SampleNotPresentException.class);
-    iter.seek(new Range(), LocalityGroupUtil.EMPTY_CF_SET, false);
+    final MemoryIterator iter2 = imm.skvIterator(sampleConfig1);
+    assertThrows(SampleNotPresentException.class,
+        () -> iter2.seek(new Range(), LocalityGroupUtil.EMPTY_CF_SET, false));
   }
 
   private TreeMap<Key,Value> readAll(SortedKeyValueIterator<Key,Value> iter) throws IOException {

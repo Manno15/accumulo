@@ -55,6 +55,16 @@ public class ServiceEnvironmentImpl implements ServiceEnvironment {
     }
 
     @Override
+    public boolean isSet(String key) {
+      Property prop = Property.getPropertyByKey(key);
+      if (prop != null) {
+        return acfg.isPropertySet(prop, false);
+      } else {
+        return acfg.get(key) != null;
+      }
+    }
+
+    @Override
     public String get(String key) {
       // Get prop to check if sensitive, also looking up by prop may be more efficient.
       Property prop = Property.getPropertyByKey(key);
@@ -121,7 +131,7 @@ public class ServiceEnvironmentImpl implements ServiceEnvironment {
 
   @Override
   public Configuration getConfiguration(TableId tableId) {
-    return new ConfigurationImpl(srvCtx.getServerConfFactory().getTableConfiguration(tableId));
+    return new ConfigurationImpl(srvCtx.getTableConfiguration(tableId));
   }
 
   @Override
@@ -138,8 +148,7 @@ public class ServiceEnvironmentImpl implements ServiceEnvironment {
   @Override
   public <T> T instantiate(TableId tableId, String className, Class<T> base)
       throws ReflectiveOperationException, IOException {
-    String ctx =
-        srvCtx.getServerConfFactory().getTableConfiguration(tableId).get(Property.TABLE_CLASSPATH);
+    String ctx = srvCtx.getTableConfiguration(tableId).get(Property.TABLE_CLASSPATH);
     return ConfigurationTypeHelper.getClassInstance(ctx, className, base);
   }
 }

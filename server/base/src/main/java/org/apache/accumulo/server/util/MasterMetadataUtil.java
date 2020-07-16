@@ -41,6 +41,7 @@ import org.apache.accumulo.core.data.TableId;
 import org.apache.accumulo.core.data.Value;
 import org.apache.accumulo.core.dataImpl.KeyExtent;
 import org.apache.accumulo.core.metadata.MetadataTable;
+import org.apache.accumulo.core.metadata.StoredTabletFile;
 import org.apache.accumulo.core.metadata.TabletFile;
 import org.apache.accumulo.core.metadata.schema.Ample.TabletMutator;
 import org.apache.accumulo.core.metadata.schema.DataFileValue;
@@ -63,7 +64,7 @@ public class MasterMetadataUtil {
   private static final Logger log = LoggerFactory.getLogger(MasterMetadataUtil.class);
 
   public static void addNewTablet(ServerContext context, KeyExtent extent, String dirName,
-      TServerInstance location, Map<TabletFile,DataFileValue> datafileSizes,
+      TServerInstance location, Map<StoredTabletFile,DataFileValue> datafileSizes,
       Map<Long,? extends Collection<TabletFile>> bulkLoadedFiles, MetadataTime time,
       long lastFlushID, long lastCompactID, ZooLock zooLock) {
 
@@ -88,7 +89,7 @@ public class MasterMetadataUtil {
 
     for (Entry<Long,? extends Collection<TabletFile>> entry : bulkLoadedFiles.entrySet()) {
       for (TabletFile ref : entry.getValue()) {
-        tablet.putBulkFile(ref, entry.getKey().longValue());
+        tablet.putBulkFile(ref, entry.getKey());
       }
     }
 
@@ -128,18 +129,14 @@ public class MasterMetadataUtil {
     try (ScannerImpl scanner2 = new ScannerImpl(context, MetadataTable.ID, Authorizations.EMPTY)) {
       scanner2.setRange(new Range(prevRowKey, prevRowKey.followingKey(PartialKey.ROW)));
 
-      if (!scanner2.iterator().hasNext()) {
-        log.info("Rolling back incomplete split {} {}", metadataEntry, metadataPrevEndRow);
-        MetadataTableUtil.rollBackSplit(metadataEntry, oper, context, lock);
-        return new KeyExtent(metadataEntry, oper);
-      } else {
+      if (scanner2.iterator().hasNext()) {
         log.info("Finishing incomplete split {} {}", metadataEntry, metadataPrevEndRow);
 
-        List<TabletFile> highDatafilesToRemove = new ArrayList<>();
+        List<StoredTabletFile> highDatafilesToRemove = new ArrayList<>();
 
-        SortedMap<TabletFile,DataFileValue> origDatafileSizes = new TreeMap<>();
-        SortedMap<TabletFile,DataFileValue> highDatafileSizes = new TreeMap<>();
-        SortedMap<TabletFile,DataFileValue> lowDatafileSizes = new TreeMap<>();
+        SortedMap<StoredTabletFile,DataFileValue> origDatafileSizes = new TreeMap<>();
+        SortedMap<StoredTabletFile,DataFileValue> highDatafileSizes = new TreeMap<>();
+        SortedMap<StoredTabletFile,DataFileValue> lowDatafileSizes = new TreeMap<>();
 
         try (Scanner scanner3 = new ScannerImpl(context, MetadataTable.ID, Authorizations.EMPTY)) {
           Key rowKey = new Key(metadataEntry);
@@ -149,8 +146,9 @@ public class MasterMetadataUtil {
 
           for (Entry<Key,Value> entry : scanner3) {
             if (entry.getKey().compareColumnFamily(DataFileColumnFamily.NAME) == 0) {
-              TabletFile tf = new TabletFile(entry.getKey().getColumnQualifierData().toString());
-              origDatafileSizes.put(tf, new DataFileValue(entry.getValue().get()));
+              StoredTabletFile stf =
+                  new StoredTabletFile(entry.getKey().getColumnQualifierData().toString());
+              origDatafileSizes.put(stf, new DataFileValue(entry.getValue().get()));
             }
           }
         }
@@ -162,6 +160,10 @@ public class MasterMetadataUtil {
             context, lock);
 
         return new KeyExtent(metadataEntry, KeyExtent.encodePrevEndRow(metadataPrevEndRow));
+      } else {
+        log.info("Rolling back incomplete split {} {}", metadataEntry, metadataPrevEndRow);
+        MetadataTableUtil.rollBackSplit(metadataEntry, oper, context, lock);
+        return new KeyExtent(metadataEntry, oper);
       }
     }
   }
@@ -178,7 +180,7 @@ public class MasterMetadataUtil {
   }
 
   public static void replaceDatafiles(ServerContext context, KeyExtent extent,
-      Set<TabletFile> datafilesToDelete, Set<TabletFile> scanFiles, TabletFile path,
+      Set<StoredTabletFile> datafilesToDelete, Set<StoredTabletFile> scanFiles, TabletFile path,
       Long compactionId, DataFileValue size, String address, TServerInstance lastLocation,
       ZooLock zooLock) {
 
@@ -214,16 +216,17 @@ public class MasterMetadataUtil {
    *          should be relative to the table directory
    *
    */
-  public static void updateTabletDataFile(ServerContext context, KeyExtent extent, TabletFile path,
-      TabletFile mergeFile, DataFileValue dfv, MetadataTime time, Set<TabletFile> filesInUseByScans,
-      String address, ZooLock zooLock, Set<String> unusedWalLogs, TServerInstance lastLocation,
-      long flushId) {
+  public static StoredTabletFile updateTabletDataFile(ServerContext context, KeyExtent extent,
+      TabletFile path, DataFileValue dfv, MetadataTime time, String address, ZooLock zooLock,
+      Set<String> unusedWalLogs, TServerInstance lastLocation, long flushId) {
 
     TabletMutator tablet = context.getAmple().mutateTablet(extent);
+    StoredTabletFile newFile = null;
 
     if (dfv.getNumEntries() > 0) {
       tablet.putFile(path, dfv);
       tablet.putTime(time);
+      newFile = path.insert();
 
       TServerInstance self = getTServerInstance(address, zooLock);
       tablet.putLocation(self, LocationType.LAST);
@@ -235,15 +238,11 @@ public class MasterMetadataUtil {
     }
     tablet.putFlushId(flushId);
 
-    if (mergeFile != null) {
-      tablet.deleteFile(mergeFile);
-    }
-
     unusedWalLogs.forEach(tablet::deleteWal);
-    filesInUseByScans.forEach(tablet::putScan);
 
     tablet.putZooLock(zooLock);
 
     tablet.mutate();
+    return newFile;
   }
 }

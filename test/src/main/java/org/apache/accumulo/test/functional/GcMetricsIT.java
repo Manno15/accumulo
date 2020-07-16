@@ -22,14 +22,19 @@ import static org.junit.Assert.assertTrue;
 
 import java.util.Collections;
 import java.util.Map;
+import java.util.Objects;
 import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.apache.accumulo.core.client.Accumulo;
 import org.apache.accumulo.core.client.AccumuloClient;
+import org.apache.accumulo.core.conf.Property;
 import org.apache.accumulo.gc.metrics.GcMetrics;
-import org.apache.accumulo.harness.AccumuloClusterHarness;
+import org.apache.accumulo.miniclusterImpl.MiniAccumuloConfigImpl;
 import org.apache.accumulo.test.metrics.MetricsFileTailer;
+import org.apache.hadoop.conf.Configuration;
 import org.junit.Before;
 import org.junit.Test;
 import org.slf4j.Logger;
@@ -39,7 +44,7 @@ import org.slf4j.LoggerFactory;
  * Functional test that uses a hadoop metrics 2 file sink to read published metrics for
  * verification.
  */
-public class GcMetricsIT extends AccumuloClusterHarness {
+public class GcMetricsIT extends ConfigurableMacBase {
 
   private static final Logger log = LoggerFactory.getLogger(GcMetricsIT.class);
 
@@ -53,9 +58,14 @@ public class GcMetricsIT extends AccumuloClusterHarness {
       "AccGcRunCycleCount", "AccGcStarted", "AccGcWalCandidates", "AccGcWalDeleted",
       "AccGcWalErrors", "AccGcWalFinished", "AccGcWalInUse", "AccGcWalStarted"};
 
+  @Override
+  protected void configure(MiniAccumuloConfigImpl cfg, Configuration hadoopCoreSite) {
+    cfg.setProperty(Property.GC_METRICS_ENABLED, "true");
+  }
+
   @Before
-  public void setup() {
-    accumuloClient = Accumulo.newClient().from(getClientProps()).build();
+  public void init() {
+    accumuloClient = Accumulo.newClient().from(getClientProperties()).build();
   }
 
   @Override
@@ -66,6 +76,15 @@ public class GcMetricsIT extends AccumuloClusterHarness {
   @Test
   public void gcMetricsPublished() {
 
+    boolean gcMetricsEnabled =
+        cluster.getSiteConfiguration().getBoolean(Property.GC_METRICS_ENABLED);
+
+    if (!gcMetricsEnabled) {
+      log.info("gc metrics are disabled with GC_METRICS_ENABLED=true");
+      return;
+    }
+
+    // log.trace("Client started, properties:{}", accumuloClient.properties());
     log.trace("Client started, properties:{}", accumuloClient.properties());
 
     MetricsFileTailer gcTail = new MetricsFileTailer("accumulo.sink.file-gc");
@@ -77,9 +96,10 @@ public class GcMetricsIT extends AccumuloClusterHarness {
 
     try {
 
-      long testStart = System.currentTimeMillis();
+      var updateTimestamp = System.currentTimeMillis();
 
-      // ignore first line - if file exists it can be from another test / run
+      // Read two updates, throw away the first snapshot - it could have been from a previous run
+      // or another test (the file appends.)
       LineUpdate firstUpdate = waitForUpdate(-1, gcTail);
       firstUpdate = waitForUpdate(firstUpdate.getLastUpdate(), gcTail);
 
@@ -89,8 +109,9 @@ public class GcMetricsIT extends AccumuloClusterHarness {
       log.trace("M:{}", firstSeenMap);
 
       assertTrue(lookForExpectedKeys(firstSeenMap));
-      sanity(testStart, firstSeenMap);
+      sanity(updateTimestamp, firstSeenMap);
 
+      updateTimestamp = System.currentTimeMillis();
       LineUpdate nextUpdate = waitForUpdate(firstUpdate.getLastUpdate(), gcTail);
 
       Map<String,Long> updateSeenMap = parseLine(nextUpdate.getLine());
@@ -99,7 +120,7 @@ public class GcMetricsIT extends AccumuloClusterHarness {
       log.trace("Mapped values:{}", updateSeenMap);
 
       assertTrue(lookForExpectedKeys(updateSeenMap));
-      sanity(testStart, updateSeenMap);
+      sanity(updateTimestamp, updateSeenMap);
 
       validate(firstSeenMap, updateSeenMap);
 
@@ -132,11 +153,17 @@ public class GcMetricsIT extends AccumuloClusterHarness {
 
     long start = values.get("AccGcStarted");
     long finished = values.get("AccGcFinished");
+
+    log.debug("test start: {}, gc start: {}, gc finished: {}", testStart, start, finished);
+
     assertTrue(start >= testStart);
     assertTrue(finished >= start);
 
     start = values.get("AccGcWalStarted");
     finished = values.get("AccGcWalFinished");
+
+    log.debug("test start: {}, gc start: {}, gc finished: {}", testStart, start, finished);
+
     assertTrue(start >= testStart);
     assertTrue(finished >= start);
 
@@ -148,13 +175,23 @@ public class GcMetricsIT extends AccumuloClusterHarness {
    *
    * @param firstSeen
    *          map of first metric update
-   * @param nextSeen
+   * @param update
    *          map of a later metric update.
    */
-  private void validate(Map<String,Long> firstSeen, Map<String,Long> nextSeen) {
-    assertTrue(nextSeen.get("AccGcStarted") > firstSeen.get("AccGcStarted"));
-    assertTrue(nextSeen.get("AccGcFinished") > firstSeen.get("AccGcWalStarted"));
-    assertTrue(nextSeen.get("AccGcRunCycleCount") > firstSeen.get("AccGcRunCycleCount"));
+  private void validate(Map<String,Long> firstSeen, Map<String,Long> update) {
+
+    log.debug("First: {}, Update: {}", firstSeen, update);
+
+    assertTrue("update should start after first",
+        update.get("AccGcStarted") > firstSeen.get("AccGcStarted"));
+    assertTrue("update should finish after first ",
+        update.get("AccGcFinished") > firstSeen.get("AccGcFinished"));
+    assertTrue("wal collect should start after gc cycle",
+        firstSeen.get("AccGcWalStarted") >= firstSeen.get("AccGcFinished"));
+    assertTrue("wal collect should start after gc cycle",
+        update.get("AccGcWalStarted") >= update.get("AccGcFinished"));
+    assertTrue("cycle count should increment",
+        update.get("AccGcRunCycleCount") > firstSeen.get("AccGcRunCycleCount"));
   }
 
   /**
@@ -206,12 +243,14 @@ public class GcMetricsIT extends AccumuloClusterHarness {
 
   private LineUpdate waitForUpdate(final long prevUpdate, final MetricsFileTailer tail) {
 
+    long start = System.currentTimeMillis();
+
     for (int count = 0; count < NUM_TAIL_ATTEMPTS; count++) {
 
       String line = tail.getLast();
       long currUpdate = tail.getLastUpdate();
 
-      if (line != null && (currUpdate != prevUpdate)) {
+      if (line != null && (currUpdate != prevUpdate) && isValidTimestamp(line, start)) {
         return new LineUpdate(tail.getLastUpdate(), line);
       }
 
@@ -226,6 +265,28 @@ public class GcMetricsIT extends AccumuloClusterHarness {
     throw new IllegalStateException(
         String.format("File source update not received after %d tries in %d sec", NUM_TAIL_ATTEMPTS,
             TimeUnit.MILLISECONDS.toSeconds(TAIL_DELAY * NUM_TAIL_ATTEMPTS)));
+  }
+
+  private static final Pattern timestampPattern = Pattern.compile("^\\s*(?<timestamp>\\d+).*");
+
+  private boolean isValidTimestamp(final String line, final long start) {
+
+    if (Objects.isNull(line)) {
+      return false;
+    }
+
+    Matcher m = timestampPattern.matcher(line);
+
+    if (m.matches()) {
+      try {
+        var timestamp = Long.parseLong(m.group("timestamp"));
+        return timestamp >= start;
+      } catch (NumberFormatException ex) {
+        log.trace("Could not parse timestamp from line '{}", line);
+        return false;
+      }
+    }
+    return false;
   }
 
   private boolean lookForExpectedKeys(final Map<String,Long> received) {

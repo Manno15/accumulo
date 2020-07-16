@@ -28,11 +28,12 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.function.Predicate;
 
+import org.apache.accumulo.core.client.admin.compaction.TooManyDeletesSelector;
 import org.apache.accumulo.core.client.rfile.RFile.WriterOptions;
 import org.apache.accumulo.core.client.summary.SummarizerConfiguration;
 import org.apache.accumulo.core.client.summary.Summary;
 import org.apache.accumulo.core.client.summary.summarizers.DeletesSummarizer;
-import org.apache.accumulo.core.metadata.TabletFile;
+import org.apache.accumulo.core.metadata.StoredTabletFile;
 import org.apache.accumulo.core.metadata.schema.DataFileValue;
 import org.apache.accumulo.tserver.compaction.CompactionPlan;
 import org.apache.accumulo.tserver.compaction.DefaultCompactionStrategy;
@@ -78,7 +79,9 @@ import org.apache.accumulo.tserver.compaction.MajorCompactionRequest;
  * href=https://issues.apache.org/jira/browse/ACCUMULO-4573>ACCUMULO-4573</a>
  *
  * @since 2.0.0
+ * @deprecated since 2.1.0 use {@link TooManyDeletesSelector} instead
  */
+@Deprecated(since = "2.1.0", forRemoval = true)
 public class TooManyDeletesCompactionStrategy extends DefaultCompactionStrategy {
 
   private boolean shouldCompact = false;
@@ -119,7 +122,7 @@ public class TooManyDeletesCompactionStrategy extends DefaultCompactionStrategy 
         SummarizerConfiguration.fromTableProperties(request.getTableProperties());
 
     // check if delete summarizer is configured for table
-    if (configuredSummarizers.stream().map(sc -> sc.getClassName())
+    if (configuredSummarizers.stream().map(SummarizerConfiguration::getClassName)
         .anyMatch(cn -> cn.equals(DeletesSummarizer.class.getName()))) {
       // This is called before gatherInformation, so need to always queue for compaction until
       // context
@@ -143,7 +146,7 @@ public class TooManyDeletesCompactionStrategy extends DefaultCompactionStrategy 
     long total = 0;
     long deletes = 0;
 
-    for (Entry<TabletFile,DataFileValue> entry : request.getFiles().entrySet()) {
+    for (Entry<StoredTabletFile,DataFileValue> entry : request.getFiles().entrySet()) {
       Collection<Summary> summaries =
           request.getSummaries(Collections.singleton(entry.getKey()), summarizerPredicate);
       if (summaries.size() == 1) {

@@ -18,10 +18,12 @@
  */
 package org.apache.accumulo.test;
 
+import static org.apache.accumulo.core.Constants.MAX_TABLE_NAME_LEN;
 import static org.apache.accumulo.fate.util.UtilWaitThread.sleepUninterruptibly;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -34,7 +36,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
-import java.util.SortedSet;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.concurrent.TimeUnit;
@@ -63,6 +64,7 @@ import org.apache.accumulo.core.tabletserver.thrift.TabletClientService;
 import org.apache.accumulo.harness.AccumuloClusterHarness;
 import org.apache.accumulo.test.functional.BadIterator;
 import org.apache.accumulo.test.functional.FunctionalTestUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.io.Text;
 import org.junit.After;
 import org.junit.Before;
@@ -77,7 +79,7 @@ public class TableOperationsIT extends AccumuloClusterHarness {
 
   @Override
   public int defaultTimeoutSeconds() {
-    return 30;
+    return 90;
   }
 
   @Before
@@ -104,16 +106,12 @@ public class TableOperationsIT extends AccumuloClusterHarness {
 
     accumuloClient.securityOperations().revokeTablePermission(getAdminPrincipal(), tableName,
         TablePermission.READ);
-    try {
-      accumuloClient.tableOperations().getDiskUsage(Collections.singleton(tableName));
-      fail("Should throw securityexception");
-    } catch (AccumuloSecurityException e) {}
+    assertThrows(AccumuloSecurityException.class,
+        () -> accumuloClient.tableOperations().getDiskUsage(Collections.singleton(tableName)));
 
     accumuloClient.tableOperations().delete(tableName);
-    try {
-      accumuloClient.tableOperations().getDiskUsage(Collections.singleton(tableName));
-      fail("Should throw tablenotfound");
-    } catch (TableNotFoundException e) {}
+    assertThrows(TableNotFoundException.class,
+        () -> accumuloClient.tableOperations().getDiskUsage(Collections.singleton(tableName)));
   }
 
   @Test
@@ -190,6 +188,23 @@ public class TableOperationsIT extends AccumuloClusterHarness {
   }
 
   @Test
+  public void createTableWithTableNameLengthLimit()
+      throws AccumuloException, AccumuloSecurityException, TableExistsException {
+    TableOperations tableOps = accumuloClient.tableOperations();
+    String t0 = StringUtils.repeat('a', MAX_TABLE_NAME_LEN - 1);
+    tableOps.create(t0);
+    assertTrue(tableOps.exists(t0));
+
+    String t1 = StringUtils.repeat('b', MAX_TABLE_NAME_LEN);
+    tableOps.create(t1);
+    assertTrue(tableOps.exists(t1));
+
+    String t2 = StringUtils.repeat('c', MAX_TABLE_NAME_LEN + 1);
+    assertThrows(IllegalArgumentException.class, () -> tableOps.create(t2));
+    assertFalse(tableOps.exists(t2));
+  }
+
+  @Test
   public void createMergeClonedTable() throws Exception {
     String[] names = getUniqueNames(2);
     String originalTable = names[0];
@@ -254,25 +269,6 @@ public class TableOperationsIT extends AccumuloClusterHarness {
     return map;
   }
 
-  @Test
-  public void testCompactEmptyTableWithGeneratorIterator() throws TableExistsException,
-      AccumuloException, AccumuloSecurityException, TableNotFoundException {
-    String tableName = getUniqueNames(1)[0];
-    accumuloClient.tableOperations().create(tableName);
-
-    List<IteratorSetting> list = new ArrayList<>();
-    list.add(new IteratorSetting(15, HardListIterator.class));
-    accumuloClient.tableOperations().compact(tableName, null, null, list, true, true);
-
-    try (Scanner scanner = accumuloClient.createScanner(tableName, Authorizations.EMPTY)) {
-      Map<Key,Value> actual = new TreeMap<>(COMPARE_KEY_TO_COLQ); // only compare row, colF, colQ
-      for (Map.Entry<Key,Value> entry : scanner)
-        actual.put(entry.getKey(), entry.getValue());
-      assertEquals(HardListIterator.allEntriesToInject, actual);
-      accumuloClient.tableOperations().delete(tableName);
-    }
-  }
-
   /** Compare only the row, column family and column qualifier. */
   static class KeyRowColFColQComparator implements Comparator<Key> {
     @Override
@@ -282,99 +278,6 @@ public class TableOperationsIT extends AccumuloClusterHarness {
   }
 
   static final KeyRowColFColQComparator COMPARE_KEY_TO_COLQ = new KeyRowColFColQComparator();
-
-  @Test
-  public void testCompactEmptyTableWithGeneratorIterator_Splits() throws TableExistsException,
-      AccumuloException, AccumuloSecurityException, TableNotFoundException {
-    String tableName = getUniqueNames(1)[0];
-    accumuloClient.tableOperations().create(tableName);
-    SortedSet<Text> splitset = new TreeSet<>();
-    splitset.add(new Text("f"));
-    accumuloClient.tableOperations().addSplits(tableName, splitset);
-
-    List<IteratorSetting> list = new ArrayList<>();
-    list.add(new IteratorSetting(15, HardListIterator.class));
-    accumuloClient.tableOperations().compact(tableName, null, null, list, true, true);
-
-    try (Scanner scanner = accumuloClient.createScanner(tableName, Authorizations.EMPTY)) {
-      Map<Key,Value> actual = new TreeMap<>(COMPARE_KEY_TO_COLQ); // only compare row, colF, colQ
-      for (Map.Entry<Key,Value> entry : scanner)
-        actual.put(entry.getKey(), entry.getValue());
-      assertEquals(HardListIterator.allEntriesToInject, actual);
-      accumuloClient.tableOperations().delete(tableName);
-    }
-  }
-
-  @Test
-  public void testCompactEmptyTableWithGeneratorIterator_Splits_Cancel()
-      throws TableExistsException, AccumuloException, AccumuloSecurityException,
-      TableNotFoundException {
-    String tableName = getUniqueNames(1)[0];
-    accumuloClient.tableOperations().create(tableName);
-    SortedSet<Text> splitset = new TreeSet<>();
-    splitset.add(new Text("f"));
-    accumuloClient.tableOperations().addSplits(tableName, splitset);
-
-    List<IteratorSetting> list = new ArrayList<>();
-    list.add(new IteratorSetting(15, HardListIterator.class));
-    accumuloClient.tableOperations().compact(tableName, null, null, list, true, false); // don't
-                                                                                        // block
-    accumuloClient.tableOperations().cancelCompaction(tableName);
-    // depending on timing, compaction will finish or be canceled
-
-    try (Scanner scanner = accumuloClient.createScanner(tableName, Authorizations.EMPTY)) {
-      Map<Key,Value> actual = new TreeMap<>(COMPARE_KEY_TO_COLQ); // only compare row, colF, colQ
-      for (Map.Entry<Key,Value> entry : scanner)
-        actual.put(entry.getKey(), entry.getValue());
-      switch (actual.size()) {
-        case 3:
-          // Compaction cancel didn't happen in time
-          assertEquals(HardListIterator.allEntriesToInject, actual);
-          break;
-        case 2:
-          // Compacted the first tablet (-inf, f)
-          assertEquals(HardListIterator.allEntriesToInject.headMap(new Key("f")), actual);
-          break;
-        case 1:
-          // Compacted the second tablet [f, +inf)
-          assertEquals(HardListIterator.allEntriesToInject.tailMap(new Key("f")), actual);
-          break;
-        case 0:
-          // Cancelled the compaction before it ran. No generated entries.
-          break;
-        default:
-          fail("Unexpected number of entries");
-          break;
-      }
-      accumuloClient.tableOperations().delete(tableName);
-    }
-  }
-
-  @Test
-  public void testCompactEmptyTableWithGeneratorIterator_Splits_Partial()
-      throws TableExistsException, AccumuloException, AccumuloSecurityException,
-      TableNotFoundException {
-    String tableName = getUniqueNames(1)[0];
-    accumuloClient.tableOperations().create(tableName);
-    Text splitRow = new Text("f");
-    SortedSet<Text> splitset = new TreeSet<>();
-    splitset.add(splitRow);
-    accumuloClient.tableOperations().addSplits(tableName, splitset);
-
-    List<IteratorSetting> list = new ArrayList<>();
-    list.add(new IteratorSetting(15, HardListIterator.class));
-    // compact the second tablet, not the first
-    accumuloClient.tableOperations().compact(tableName, splitRow, null, list, true, true);
-
-    try (Scanner scanner = accumuloClient.createScanner(tableName, Authorizations.EMPTY)) {
-      Map<Key,Value> actual = new TreeMap<>(COMPARE_KEY_TO_COLQ); // only compare row, colF, colQ
-      for (Map.Entry<Key,Value> entry : scanner)
-        actual.put(entry.getKey(), entry.getValue());
-      // only expect the entries in the second tablet
-      assertEquals(HardListIterator.allEntriesToInject.tailMap(new Key(splitRow)), actual);
-      accumuloClient.tableOperations().delete(tableName);
-    }
-  }
 
   /** Test recovery from bad majc iterator via compaction cancel. */
   @Test

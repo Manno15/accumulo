@@ -33,6 +33,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Objects;
 import java.util.stream.StreamSupport;
 
 import org.apache.accumulo.core.Constants;
@@ -53,6 +54,7 @@ import org.apache.accumulo.core.data.Value;
 import org.apache.accumulo.core.dataImpl.KeyExtent;
 import org.apache.accumulo.core.file.FileOperations;
 import org.apache.accumulo.core.file.FileSKVIterator;
+import org.apache.accumulo.core.metadata.MetadataTable;
 import org.apache.accumulo.core.metadata.RootTable;
 import org.apache.accumulo.core.metadata.TabletFile;
 import org.apache.accumulo.core.metadata.schema.Ample;
@@ -62,13 +64,13 @@ import org.apache.accumulo.core.metadata.schema.MetadataTime;
 import org.apache.accumulo.core.metadata.schema.RootTabletMetadata;
 import org.apache.accumulo.core.metadata.schema.TabletMetadata.LocationType;
 import org.apache.accumulo.core.security.Authorizations;
+import org.apache.accumulo.core.spi.compaction.SimpleCompactionDispatcher;
 import org.apache.accumulo.core.tabletserver.log.LogEntry;
 import org.apache.accumulo.core.util.HostAndPort;
 import org.apache.accumulo.fate.zookeeper.ZooReaderWriter;
 import org.apache.accumulo.fate.zookeeper.ZooUtil;
 import org.apache.accumulo.fate.zookeeper.ZooUtil.NodeExistsPolicy;
 import org.apache.accumulo.fate.zookeeper.ZooUtil.NodeMissingPolicy;
-import org.apache.accumulo.server.ServerConstants;
 import org.apache.accumulo.server.ServerContext;
 import org.apache.accumulo.server.fs.VolumeManager;
 import org.apache.accumulo.server.gc.GcVolumeUtil;
@@ -76,6 +78,7 @@ import org.apache.accumulo.server.master.state.TServerInstance;
 import org.apache.accumulo.server.metadata.RootGcCandidates;
 import org.apache.accumulo.server.metadata.ServerAmpleImpl;
 import org.apache.accumulo.server.metadata.TabletMutatorBase;
+import org.apache.accumulo.server.util.TablePropUtil;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -108,6 +111,7 @@ public class Upgrader9to10 implements Upgrader {
 
   @Override
   public void upgradeZookeeper(ServerContext ctx) {
+    setMetaTableProps(ctx);
     upgradeRootTabletMetadata(ctx);
   }
 
@@ -123,6 +127,24 @@ public class Upgrader9to10 implements Upgrader {
     upgradeRelativePaths(ctx, Ample.DataLevel.USER);
     upgradeDirColumns(ctx, Ample.DataLevel.USER);
     upgradeFileDeletes(ctx, Ample.DataLevel.USER);
+  }
+
+  private void setMetaTableProps(ServerContext ctx) {
+    try {
+      TablePropUtil.setTableProperty(ctx, RootTable.ID,
+          Property.TABLE_COMPACTION_DISPATCHER.getKey(),
+          SimpleCompactionDispatcher.class.getName());
+      TablePropUtil.setTableProperty(ctx, RootTable.ID,
+          Property.TABLE_COMPACTION_DISPATCHER_OPTS.getKey() + "service", "root");
+
+      TablePropUtil.setTableProperty(ctx, MetadataTable.ID,
+          Property.TABLE_COMPACTION_DISPATCHER.getKey(),
+          SimpleCompactionDispatcher.class.getName());
+      TablePropUtil.setTableProperty(ctx, MetadataTable.ID,
+          Property.TABLE_COMPACTION_DISPATCHER_OPTS.getKey() + "service", "meta");
+    } catch (KeeperException | InterruptedException e) {
+      throw new RuntimeException("Unable to set system table properties", e);
+    }
   }
 
   private void upgradeRootTabletMetadata(ServerContext ctx) {
@@ -154,7 +176,7 @@ public class Upgrader9to10 implements Upgrader {
       logs.forEach(tabletMutator::putWal);
 
       Map<String,DataFileValue> files = cleanupRootTabletFiles(ctx.getVolumeManager(), dir);
-      files.forEach((path, dfv) -> tabletMutator.putFile(new TabletFile(path), dfv));
+      files.forEach((path, dfv) -> tabletMutator.putFile(new TabletFile(new Path(path)), dfv));
 
       tabletMutator.putTime(computeRootTabletTime(ctx, files.keySet()));
 
@@ -230,7 +252,7 @@ public class Upgrader9to10 implements Upgrader {
 
     String[] parts = str.split("[|]", 2);
     HostAndPort address = HostAndPort.fromString(parts[0]);
-    if (parts.length > 1 && parts[1] != null && parts[1].length() > 0) {
+    if (parts.length > 1 && parts[1] != null && !parts[1].isEmpty()) {
       return new TServerInstance(address, parts[1]);
     } else {
       // a 1.2 location specification: DO NOT WANT
@@ -302,13 +324,12 @@ public class Upgrader9to10 implements Upgrader {
       for (String good : goodPaths) {
         Path path = new Path(good);
 
-        FileSystem ns = context.getVolumeManager().getVolumeByPath(path).getFileSystem();
+        FileSystem ns = context.getVolumeManager().getFileSystemByPath(path);
         long maxTime = -1;
         try (FileSKVIterator reader = FileOperations.getInstance().newReaderBuilder()
             .forFile(path.toString(), ns, ns.getConf(), context.getCryptoService())
-            .withTableConfiguration(
-                context.getServerConfFactory().getTableConfiguration(RootTable.ID))
-            .seekToBeginning().build()) {
+            .withTableConfiguration(context.getTableConfiguration(RootTable.ID)).seekToBeginning()
+            .build()) {
           while (reader.hasTop()) {
             maxTime = Math.max(maxTime, reader.getTopKey().getTimestamp());
             reader.next();
@@ -405,6 +426,8 @@ public class Upgrader9to10 implements Upgrader {
     try (BatchWriter writer = c.createBatchWriter(tableName, new BatchWriterConfig())) {
       log.info("looking for candidates in table {}", tableName);
       Iterator<String> oldCandidates = getOldCandidates(ctx, tableName);
+      String upgradeProp = ctx.getConfiguration().get(Property.INSTANCE_VOLUMES_UPGRADE_RELATIVE);
+
       while (oldCandidates.hasNext()) {
         List<String> deletes = readCandidatesInBatch(oldCandidates);
         log.info("found {} deletes to upgrade", deletes.size());
@@ -412,7 +435,8 @@ public class Upgrader9to10 implements Upgrader {
           // create new formatted delete
           log.trace("upgrading delete entry for {}", olddelete);
 
-          String updatedDel = switchToAllVolumes(olddelete);
+          Path absolutePath = resolveRelativeDelete(olddelete, upgradeProp);
+          String updatedDel = switchToAllVolumes(absolutePath);
 
           writer.addMutation(ServerAmpleImpl.createDeleteMutation(updatedDel));
         }
@@ -430,26 +454,30 @@ public class Upgrader9to10 implements Upgrader {
     }
   }
 
+  /**
+   * If path of file to delete is a directory, change it to all volumes. See {@link GcVolumeUtil}.
+   * For example: A directory "hdfs://localhost:9000/accumulo/tables/5a/t-0005" with volume removed
+   * "tables/5a/t-0005" depth = 3 will be switched to "agcav:/tables/5a/t-0005". A file
+   * "hdfs://localhost:9000/accumulo/tables/5a/t-0005/A0012.rf" with volume removed
+   * "tables/5a/t-0005/A0012.rf" depth = 4 will be returned as is.
+   */
   @VisibleForTesting
-  static String switchToAllVolumes(String olddelete) {
-    Path relPath = VolumeManager.FileType.TABLE.removeVolume(new Path(olddelete));
+  static String switchToAllVolumes(Path olddelete) {
+    Path pathNoVolume = Objects.requireNonNull(VolumeManager.FileType.TABLE.removeVolume(olddelete),
+        "Invalid delete marker. No volume in path: " + olddelete);
 
-    if (relPath == null) {
-      // An old style relative delete marker of the form /<table id>/<tablet dir>[/<file>]
-      relPath = new Path("/" + VolumeManager.FileType.TABLE.getDirectory() + olddelete);
-      Preconditions.checkState(
-          olddelete.startsWith("/") && relPath.depth() == 3 || relPath.depth() == 4,
-          "Unrecongnized relative delete marker {}", olddelete);
-    }
-
-    if (relPath.depth() == 3 && !relPath.getName().startsWith(Constants.BULK_PREFIX)) {
-      return GcVolumeUtil.getDeleteTabletOnAllVolumesUri(TableId.of(relPath.getParent().getName()),
-          relPath.getName());
+    // a directory path with volume removed will have a depth of 3 so change volume to all volumes
+    if (pathNoVolume.depth() == 3 && !pathNoVolume.getName().startsWith(Constants.BULK_PREFIX)) {
+      return GcVolumeUtil.getDeleteTabletOnAllVolumesUri(
+          TableId.of(pathNoVolume.getParent().getName()), pathNoVolume.getName());
     } else {
-      return olddelete;
+      return olddelete.toString();
     }
   }
 
+  /**
+   * Return path of the file from old delete markers
+   */
   private Iterator<String> getOldCandidates(ServerContext ctx, String tableName)
       throws TableNotFoundException {
     Range range = MetadataSchema.DeletesSection.getRange();
@@ -548,7 +576,6 @@ public class Upgrader9to10 implements Upgrader {
           }
           Path relPath = resolveRelativePath(metaEntry, key);
           Path absPath = new Path(upgradeProperty, relPath);
-          // Path absPath = new Path(Paths.get(upgradeProperty).normalize().toString(), relPath);
           if (fs.exists(absPath)) {
             log.debug("Changing Tablet File path from {} to {}", metaEntry, absPath);
             Mutation m = new Mutation(key.getRow());
@@ -595,7 +622,6 @@ public class Upgrader9to10 implements Upgrader {
           }
           Path relPath = resolveRelativePath(metaEntry, key);
           Path absPath = new Path(upgradeProperty, relPath);
-          // Path absPath = new Path(Paths.get(upgradeProperty).normalize().toString(), relPath);
           if (!fs.exists(absPath)) {
             throw new IllegalArgumentException("Tablet file " + relPath + " not found at " + absPath
                 + " using volume: " + upgradeProperty);
@@ -615,7 +641,7 @@ public class Upgrader9to10 implements Upgrader {
    * Resolve old-style relative paths, returning Path of everything except volume and base
    */
   private static Path resolveRelativePath(String metadataEntry, Key key) {
-    String prefix = ServerConstants.TABLE_DIR + "/";
+    String prefix = VolumeManager.FileType.TABLE.getDirectory() + "/";
     if (metadataEntry.startsWith("../")) {
       // resolve style "../2a/t-0003/C0004.rf"
       return new Path(prefix + metadataEntry.substring(3));
@@ -624,5 +650,32 @@ public class Upgrader9to10 implements Upgrader {
       TableId tableId = KeyExtent.tableOfMetadataRow(key.getRow());
       return new Path(prefix + tableId.canonical() + metadataEntry);
     }
+  }
+
+  /**
+   * Resolve old relative delete markers of the form /tableId/tabletDir/[file] to
+   * UpgradeVolume/tables/tableId/tabletDir/[file]
+   */
+  static Path resolveRelativeDelete(String oldDelete, String upgradeProperty) {
+    Path pathNoVolume = VolumeManager.FileType.TABLE.removeVolume(new Path(oldDelete));
+    Path pathToCheck = new Path(oldDelete);
+
+    // if the volume was removed properly, the path is absolute so return, otherwise
+    // it is a relative path so proceed with more checks
+    if (pathNoVolume != null)
+      return pathToCheck;
+
+    // A relative path directory of the form "/tableId/tabletDir" will have depth == 2
+    // A relative path file of the form "/tableId/tabletDir/file" will have depth == 3
+    Preconditions.checkState(
+        oldDelete.startsWith("/") && (pathToCheck.depth() == 2 || pathToCheck.depth() == 3),
+        "Unrecognized relative delete marker {}", oldDelete);
+
+    // found relative paths so verify the property used to build the absolute paths
+    if (upgradeProperty == null || upgradeProperty.isBlank()) {
+      throw new IllegalArgumentException(
+          "Missing required property " + Property.INSTANCE_VOLUMES_UPGRADE_RELATIVE.getKey());
+    }
+    return new Path(upgradeProperty, VolumeManager.FileType.TABLE.getDirectory() + oldDelete);
   }
 }

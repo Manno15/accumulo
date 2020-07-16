@@ -27,20 +27,25 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.UnknownHostException;
 import java.util.Arrays;
+import java.util.EnumSet;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.stream.Collectors;
 
 import javax.net.ssl.SSLServerSocket;
 
 import org.apache.accumulo.core.conf.AccumuloConfiguration;
 import org.apache.accumulo.core.conf.Property;
+import org.apache.accumulo.core.conf.PropertyType;
 import org.apache.accumulo.core.rpc.SslConnectionParams;
 import org.apache.accumulo.core.rpc.ThriftUtil;
 import org.apache.accumulo.core.rpc.UGIAssumingTransportFactory;
 import org.apache.accumulo.core.util.Daemon;
 import org.apache.accumulo.core.util.HostAndPort;
+import org.apache.accumulo.core.util.Pair;
 import org.apache.accumulo.core.util.SimpleThreadPool;
 import org.apache.accumulo.fate.util.LoggingRunnable;
 import org.apache.accumulo.server.ServerContext;
@@ -94,6 +99,21 @@ public class TServerUtils {
   }
 
   /**
+   *
+   * @param config
+   *          Accumulo configuration
+   * @return A Map object with reserved port numbers as keys and Property objects as values
+   */
+
+  public static Map<Integer,Property> getReservedPorts(AccumuloConfiguration config) {
+    return EnumSet.allOf(Property.class).stream()
+        .filter(p -> p.getType() == PropertyType.PORT && p != Property.TSERV_CLIENTPORT)
+        .flatMap(rp -> {
+          return Arrays.stream(config.getPort(rp)).mapToObj(portNum -> new Pair<>(portNum, rp));
+        }).collect(Collectors.toMap(Pair::getFirst, Pair::getSecond));
+  }
+
+  /**
    * Start a server, at the given port, or higher, if that port is not available.
    *
    * @param service
@@ -121,8 +141,8 @@ public class TServerUtils {
   public static ServerAddress startServer(MetricsSystem metricsSystem, ServerContext service,
       String hostname, Property portHintProperty, TProcessor processor, String serverName,
       String threadName, Property portSearchProperty, Property minThreadProperty,
-      Property timeBetweenThreadChecksProperty, Property maxMessageSizeProperty)
-      throws UnknownHostException {
+      Property threadTimeOutProperty, Property timeBetweenThreadChecksProperty,
+      Property maxMessageSizeProperty) throws UnknownHostException {
     final AccumuloConfiguration config = service.getConfiguration();
 
     final int[] portHint = config.getPort(portHintProperty);
@@ -130,6 +150,11 @@ public class TServerUtils {
     int minThreads = 2;
     if (minThreadProperty != null) {
       minThreads = config.getCount(minThreadProperty);
+    }
+
+    long threadTimeOut = SimpleThreadPool.DEFAULT_TIMEOUT_MILLISECS;
+    if (threadTimeOutProperty != null) {
+      threadTimeOut = config.getTimeInMillis(threadTimeOutProperty);
     }
 
     long timeBetweenThreadChecks = 1000;
@@ -155,7 +180,8 @@ public class TServerUtils {
       processor = updateSaslProcessor(serverType, processor);
     }
 
-    // create the TimedProcessor outside the port search loop so we don't try to register the same
+    // create the TimedProcessor outside the port search loop so we don't try to
+    // register the same
     // metrics mbean more than once
     TimedProcessor timedProcessor =
         new TimedProcessor(metricsSystem, config, processor, serverName, threadName);
@@ -163,23 +189,33 @@ public class TServerUtils {
     HostAndPort[] addresses = getHostAndPorts(hostname, portHint);
     try {
       return TServerUtils.startTServer(serverType, timedProcessor, serverName, threadName,
-          minThreads, simpleTimerThreadpoolSize, timeBetweenThreadChecks, maxMessageSize,
-          service.getServerSslParams(), service.getSaslParams(), service.getClientTimeoutInMillis(),
-          addresses);
+          minThreads, threadTimeOut, simpleTimerThreadpoolSize, timeBetweenThreadChecks,
+          maxMessageSize, service.getServerSslParams(), service.getSaslParams(),
+          service.getClientTimeoutInMillis(), addresses);
     } catch (TTransportException e) {
       if (portSearch) {
+        // Build a list of reserved ports - as identified by properties of type PropertyType.PORT
+        Map<Integer,Property> reservedPorts = getReservedPorts(config);
+
         HostAndPort last = addresses[addresses.length - 1];
         // Attempt to allocate a port outside of the specified port property
         // Search sequentially over the next 1000 ports
         for (int port = last.getPort() + 1; port < last.getPort() + 1001; port++) {
+          if (reservedPorts.containsKey(port)) {
+            log.debug("During port search, skipping reserved port {} - property {} ({})", port,
+                reservedPorts.get(port).getKey(), reservedPorts.get(port).getDescription());
+
+            continue;
+          }
+
           if (port > 65535) {
             break;
           }
           try {
             HostAndPort addr = HostAndPort.fromParts(hostname, port);
             return TServerUtils.startTServer(serverType, timedProcessor, serverName, threadName,
-                minThreads, simpleTimerThreadpoolSize, timeBetweenThreadChecks, maxMessageSize,
-                service.getServerSslParams(), service.getSaslParams(),
+                minThreads, threadTimeOut, simpleTimerThreadpoolSize, timeBetweenThreadChecks,
+                maxMessageSize, service.getServerSslParams(), service.getSaslParams(),
                 service.getClientTimeoutInMillis(), addr);
           } catch (TTransportException tte) {
             log.info("Unable to use port {}, retrying. (Thread Name = {})", port, threadName);
@@ -200,8 +236,8 @@ public class TServerUtils {
    */
   public static ServerAddress createThreadedSelectorServer(HostAndPort address,
       TProcessor processor, TProtocolFactory protocolFactory, final String serverName,
-      final int numThreads, final int numSTThreads, long timeBetweenThreadChecks,
-      long maxMessageSize) throws TTransportException {
+      final int numThreads, final long threadTimeOut, final int numSTThreads,
+      long timeBetweenThreadChecks, long maxMessageSize) throws TTransportException {
 
     final TNonblockingServerSocket transport =
         new TNonblockingServerSocket(new InetSocketAddress(address.getHost(), address.getPort()));
@@ -216,8 +252,8 @@ public class TServerUtils {
     options.stopTimeoutVal(5);
 
     // Create our own very special thread pool.
-    ThreadPoolExecutor pool =
-        createSelfResizingThreadPool(serverName, numThreads, numSTThreads, timeBetweenThreadChecks);
+    ThreadPoolExecutor pool = createSelfResizingThreadPool(serverName, numThreads, threadTimeOut,
+        numSTThreads, timeBetweenThreadChecks);
 
     options.executorService(pool);
     options.processorFactory(new TProcessorFactory(processor));
@@ -235,8 +271,8 @@ public class TServerUtils {
    */
   public static ServerAddress createNonBlockingServer(HostAndPort address, TProcessor processor,
       TProtocolFactory protocolFactory, final String serverName, final int numThreads,
-      final int numSTThreads, long timeBetweenThreadChecks, long maxMessageSize)
-      throws TTransportException {
+      final long threadTimeOut, final int numSTThreads, long timeBetweenThreadChecks,
+      long maxMessageSize) throws TTransportException {
 
     final TNonblockingServerSocket transport =
         new TNonblockingServerSocket(new InetSocketAddress(address.getHost(), address.getPort()));
@@ -248,8 +284,8 @@ public class TServerUtils {
     options.stopTimeoutVal(5);
 
     // Create our own very special thread pool.
-    ThreadPoolExecutor pool =
-        createSelfResizingThreadPool(serverName, numThreads, numSTThreads, timeBetweenThreadChecks);
+    ThreadPoolExecutor pool = createSelfResizingThreadPool(serverName, numThreads, threadTimeOut,
+        numSTThreads, timeBetweenThreadChecks);
 
     options.executorService(pool);
     options.processorFactory(new TProcessorFactory(processor));
@@ -269,7 +305,10 @@ public class TServerUtils {
    * @param serverName
    *          A name to describe the thrift server this executor will service
    * @param executorThreads
-   *          The maximum number of threads for the executor
+   *          The minimum number of threads for the executor
+   * @param threadTimeOut
+   *          The time after which threads are allowed to terminate including core threads. If set
+   *          to 0, the core threads will indefinitely stay running waiting for work.
    * @param simpleTimerThreads
    *          The numbers of threads used to get the {@link SimpleTimer} instance
    * @param timeBetweenThreadChecks
@@ -277,8 +316,10 @@ public class TServerUtils {
    * @return A {@link ThreadPoolExecutor} which will resize itself automatically
    */
   public static ThreadPoolExecutor createSelfResizingThreadPool(final String serverName,
-      final int executorThreads, int simpleTimerThreads, long timeBetweenThreadChecks) {
-    final ThreadPoolExecutor pool = new SimpleThreadPool(executorThreads, "ClientPool");
+      final int executorThreads, long threadTimeOut, int simpleTimerThreads,
+      long timeBetweenThreadChecks) {
+    final ThreadPoolExecutor pool =
+        new SimpleThreadPool(executorThreads, threadTimeOut, "ClientPool");
     // periodically adjust the number of threads we need by checking how busy our threads are
     SimpleTimer.getInstance(simpleTimerThreads).schedule(() -> {
       // there is a minor race condition between sampling the current state of the thread pool and
@@ -316,12 +357,13 @@ public class TServerUtils {
    */
   public static ServerAddress createBlockingServer(HostAndPort address, TProcessor processor,
       TProtocolFactory protocolFactory, long maxMessageSize, String serverName, int numThreads,
-      int numSimpleTimerThreads, long timeBetweenThreadChecks) throws TTransportException {
+      long threadTimeOut, int numSimpleTimerThreads, long timeBetweenThreadChecks)
+      throws TTransportException {
 
     InetSocketAddress isa = new InetSocketAddress(address.getHost(), address.getPort());
     // Must use an ISA, providing only a port would ignore the hostname given
     TServerSocket transport = new TServerSocket(isa);
-    ThreadPoolExecutor pool = createSelfResizingThreadPool(serverName, numThreads,
+    ThreadPoolExecutor pool = createSelfResizingThreadPool(serverName, numThreads, threadTimeOut,
         numSimpleTimerThreads, timeBetweenThreadChecks);
     TThreadPoolServer server = createTThreadPoolServer(transport, processor,
         ThriftUtil.transportFactory(maxMessageSize), protocolFactory, pool);
@@ -426,8 +468,8 @@ public class TServerUtils {
    */
   public static ServerAddress createSslThreadPoolServer(HostAndPort address, TProcessor processor,
       TProtocolFactory protocolFactory, long socketTimeout, SslConnectionParams sslParams,
-      String serverName, int numThreads, int numSimpleTimerThreads, long timeBetweenThreadChecks)
-      throws TTransportException {
+      String serverName, int numThreads, long threadTimeOut, int numSimpleTimerThreads,
+      long timeBetweenThreadChecks) throws TTransportException {
     TServerSocket transport;
     try {
       transport = getSslServerSocket(address.getPort(), (int) socketTimeout,
@@ -442,7 +484,7 @@ public class TServerUtils {
       log.info("SSL Thread Pool Server bound on {}", address);
     }
 
-    ThreadPoolExecutor pool = createSelfResizingThreadPool(serverName, numThreads,
+    ThreadPoolExecutor pool = createSelfResizingThreadPool(serverName, numThreads, threadTimeOut,
         numSimpleTimerThreads, timeBetweenThreadChecks);
 
     return new ServerAddress(createTThreadPoolServer(transport, processor,
@@ -451,8 +493,8 @@ public class TServerUtils {
 
   public static ServerAddress createSaslThreadPoolServer(HostAndPort address, TProcessor processor,
       TProtocolFactory protocolFactory, long socketTimeout, SaslServerConnectionParams params,
-      final String serverName, final int numThreads, final int numSTThreads,
-      long timeBetweenThreadChecks) throws TTransportException {
+      final String serverName, final int numThreads, final long threadTimeOut,
+      final int numSTThreads, long timeBetweenThreadChecks) throws TTransportException {
     // We'd really prefer to use THsHaServer (or similar) to avoid 1 RPC == 1 Thread that the
     // TThreadPoolServer does,
     // but sadly this isn't the case. Because TSaslTransport needs to issue a handshake when it
@@ -533,8 +575,8 @@ public class TServerUtils {
       log.info("SASL thrift server bound on {}", address);
     }
 
-    ThreadPoolExecutor pool =
-        createSelfResizingThreadPool(serverName, numThreads, numSTThreads, timeBetweenThreadChecks);
+    ThreadPoolExecutor pool = createSelfResizingThreadPool(serverName, numThreads, threadTimeOut,
+        numSTThreads, timeBetweenThreadChecks);
 
     final TThreadPoolServer server =
         createTThreadPoolServer(transport, processor, ugiTransportFactory, protocolFactory, pool);
@@ -544,8 +586,8 @@ public class TServerUtils {
 
   public static ServerAddress startTServer(MetricsSystem metricsSystem, AccumuloConfiguration conf,
       ThriftServerType serverType, TProcessor processor, String serverName, String threadName,
-      int numThreads, int numSTThreads, long timeBetweenThreadChecks, long maxMessageSize,
-      SslConnectionParams sslParams, SaslServerConnectionParams saslParams,
+      int numThreads, long threadTimeOut, int numSTThreads, long timeBetweenThreadChecks,
+      long maxMessageSize, SslConnectionParams sslParams, SaslServerConnectionParams saslParams,
       long serverSocketTimeout, HostAndPort... addresses) throws TTransportException {
 
     if (serverType == ThriftServerType.SASL) {
@@ -554,22 +596,23 @@ public class TServerUtils {
 
     return startTServer(serverType,
         new TimedProcessor(metricsSystem, conf, processor, serverName, threadName), serverName,
-        threadName, numThreads, numSTThreads, timeBetweenThreadChecks, maxMessageSize, sslParams,
-        saslParams, serverSocketTimeout, addresses);
+        threadName, numThreads, threadTimeOut, numSTThreads, timeBetweenThreadChecks,
+        maxMessageSize, sslParams, saslParams, serverSocketTimeout, addresses);
   }
 
   /**
    * @see #startTServer(ThriftServerType, TimedProcessor, TProtocolFactory, String, String, int,
-   *      int, long, long, SslConnectionParams, SaslServerConnectionParams, long, HostAndPort...)
+   *      long, int, long, long, SslConnectionParams, SaslServerConnectionParams, long,
+   *      HostAndPort...)
    */
   public static ServerAddress startTServer(ThriftServerType serverType, TimedProcessor processor,
-      String serverName, String threadName, int numThreads, int numSTThreads,
+      String serverName, String threadName, int numThreads, long threadTimeOut, int numSTThreads,
       long timeBetweenThreadChecks, long maxMessageSize, SslConnectionParams sslParams,
       SaslServerConnectionParams saslParams, long serverSocketTimeout, HostAndPort... addresses)
       throws TTransportException {
     return startTServer(serverType, processor, ThriftUtil.protocolFactory(), serverName, threadName,
-        numThreads, numSTThreads, timeBetweenThreadChecks, maxMessageSize, sslParams, saslParams,
-        serverSocketTimeout, addresses);
+        numThreads, threadTimeOut, numSTThreads, timeBetweenThreadChecks, maxMessageSize, sslParams,
+        saslParams, serverSocketTimeout, addresses);
   }
 
   /**
@@ -581,7 +624,7 @@ public class TServerUtils {
    */
   public static ServerAddress startTServer(ThriftServerType serverType, TimedProcessor processor,
       TProtocolFactory protocolFactory, String serverName, String threadName, int numThreads,
-      int numSTThreads, long timeBetweenThreadChecks, long maxMessageSize,
+      long threadTimeOut, int numSTThreads, long timeBetweenThreadChecks, long maxMessageSize,
       SslConnectionParams sslParams, SaslServerConnectionParams saslParams,
       long serverSocketTimeout, HostAndPort... addresses) throws TTransportException {
 
@@ -598,30 +641,32 @@ public class TServerUtils {
         switch (serverType) {
           case SSL:
             log.debug("Instantiating SSL Thrift server");
-            serverAddress =
-                createSslThreadPoolServer(address, processor, protocolFactory, serverSocketTimeout,
-                    sslParams, serverName, numThreads, numSTThreads, timeBetweenThreadChecks);
+            serverAddress = createSslThreadPoolServer(address, processor, protocolFactory,
+                serverSocketTimeout, sslParams, serverName, numThreads, threadTimeOut, numSTThreads,
+                timeBetweenThreadChecks);
             break;
           case SASL:
             log.debug("Instantiating SASL Thrift server");
-            serverAddress =
-                createSaslThreadPoolServer(address, processor, protocolFactory, serverSocketTimeout,
-                    saslParams, serverName, numThreads, numSTThreads, timeBetweenThreadChecks);
+            serverAddress = createSaslThreadPoolServer(address, processor, protocolFactory,
+                serverSocketTimeout, saslParams, serverName, numThreads, threadTimeOut,
+                numSTThreads, timeBetweenThreadChecks);
             break;
           case THREADPOOL:
             log.debug("Instantiating unsecure TThreadPool Thrift server");
-            serverAddress = createBlockingServer(address, processor, protocolFactory,
-                maxMessageSize, serverName, numThreads, numSTThreads, timeBetweenThreadChecks);
+            serverAddress =
+                createBlockingServer(address, processor, protocolFactory, maxMessageSize,
+                    serverName, numThreads, threadTimeOut, numSTThreads, timeBetweenThreadChecks);
             break;
           case THREADED_SELECTOR:
             log.debug("Instantiating default, unsecure Threaded selector Thrift server");
             serverAddress = createThreadedSelectorServer(address, processor, protocolFactory,
-                serverName, numThreads, numSTThreads, timeBetweenThreadChecks, maxMessageSize);
+                serverName, numThreads, threadTimeOut, numSTThreads, timeBetweenThreadChecks,
+                maxMessageSize);
             break;
           case CUSTOM_HS_HA:
             log.debug("Instantiating unsecure custom half-async Thrift server");
             serverAddress = createNonBlockingServer(address, processor, protocolFactory, serverName,
-                numThreads, numSTThreads, timeBetweenThreadChecks, maxMessageSize);
+                numThreads, threadTimeOut, numSTThreads, timeBetweenThreadChecks, maxMessageSize);
             break;
           default:
             throw new IllegalArgumentException("Unknown server type " + serverType);
