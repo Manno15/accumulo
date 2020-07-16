@@ -31,7 +31,7 @@ pipeline {
                     }
                     steps {
                         sh 'mvn clean package -PskipQA'
-                        sh "mvn install -pl assemble"
+                        sh "mvn install -T 1C -pl assemble"
                     }
                 }
                 stage('Server/Base') {
@@ -40,7 +40,7 @@ pipeline {
                     }
                     steps {
                         sh 'mvn clean package -PskipQA'
-                        sh "mvn install -pl server/base"
+                        sh "mvn install -T 1C -pl server/base"
                     }
                 }
                 stage('Server/Monitor') {
@@ -49,7 +49,7 @@ pipeline {
                     }
                     steps {
                         sh 'mvn clean package -PskipQA'
-                        sh "mvn install -pl server/monitor"
+                        sh "mvn install -T 1C -pl server/monitor"
                     }
                 }
                 stage('Server/Native') {
@@ -58,7 +58,7 @@ pipeline {
                     }
                     steps {
                         sh 'mvn clean package -PskipQA'
-                        sh "mvn install -pl server/native"
+                        sh "mvn install -T 1C -pl server/native"
                     }
                 }
                 stage('core') {
@@ -67,7 +67,7 @@ pipeline {
                     }
                     steps {
                         sh 'mvn clean package -PskipQA'
-                        sh "mvn install -pl core"
+                        sh "mvn install -T 1C -pl core"
                     }
                 }
                  stage('Server/GC') {
@@ -76,25 +76,25 @@ pipeline {
                     }
                     steps {
                         sh 'mvn clean package -PskipQA'
-                        sh "mvn install -pl server/gc"
+                        sh "mvn install -T 1C -pl server/gc"
                     }
                 }
                 stage('Hadoop-mapreduce') {
                     agent {
-                        label "batman"
+                        label "fatthor"
                     }
                     steps {
                         sh 'mvn clean package -PskipQA'
-                        sh "mvn install -pl hadoop-mapreduce"
+                        sh "mvn install -T 1C -pl hadoop-mapreduce"
                     }
                 }
                 stage('Server/Master') {
                     agent {
-                        label "batman"
+                        label "fatthor"
                     }
                     steps {
                         sh 'mvn clean package -PskipQA'
-                        sh "mvn install -pl server/master"
+                        sh "mvn install -T 1C -pl server/master"
                     }
                 }
                  stage('Iterator-test-harness') {
@@ -103,7 +103,7 @@ pipeline {
                     }
                     steps {
                         sh 'mvn clean package -PskipQA'
-                        sh "mvn install -pl iterator-test-harness"
+                        sh "mvn install -T 1C -pl iterator-test-harness"
                     }
                 }
                 stage('Server/Tracer') {
@@ -112,16 +112,16 @@ pipeline {
                     }
                     steps {
                         sh 'mvn clean package -PskipQA'
-                        sh "mvn install -pl server/tracer"
+                        sh "mvn install -T 1C -pl server/tracer"
                     }
                 }
                  stage('Server/Tserver') {
                     agent {
-                        label "shazam"
+                        label "robin"
                     }
                     steps {
                         sh 'mvn clean package -PskipQA'
-                        sh "mvn install -pl server/tserver"
+                        sh "mvn install -T 1C -pl server/tserver"
                     }
                 }
                  stage('Minicluster') {
@@ -130,7 +130,7 @@ pipeline {
                     }
                     steps {
                         sh 'mvn clean package -PskipQA'
-                        sh "mvn install -pl minicluster"
+                        sh "mvn install -T 1C -pl minicluster"
                     }
                 }
                  stage('Shell') {
@@ -139,25 +139,25 @@ pipeline {
                     }
                     steps {
                         sh 'mvn clean package -PskipQA'
-                        sh "mvn install -pl shell"
+                        sh "mvn install -T 1C -pl shell"
                     }
                 }
                  stage('Start') {
                     agent {
-                        label "nightwing"
+                        label "robin"
                     }
                     steps {
                         sh 'mvn clean package -PskipQA'
-                        sh "mvn install -pl start"
+                        sh "mvn install -T 1C -pl start"
                     }
                 }
                  stage('Tests') {
                     agent {
-                        label "fatthor"
+                        label "batwoman"
                     }
                     steps {
                         sh 'mvn clean package -PskipQA'
-                        sh "mvn install -pl test"
+                        sh "mvn install -T 1C -pl test"
                     }
                 }
             }
