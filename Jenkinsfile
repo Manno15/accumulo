@@ -24,7 +24,6 @@ pipeline {
     stages {
         stage('Run Tests') {
             parallel {
-               
                 stage('Assemble') {
                     agent {
                         label "master"
@@ -157,11 +156,10 @@ pipeline {
                     }
                     steps {
                         sh 'mvn clean package -PskipQA'
-                        sh "mvn install -T 1C -pl test"
+                        sh "mvn install -T 1.4C -pl test"
                     }
                 }
             }
         }
-       
     }
 }
