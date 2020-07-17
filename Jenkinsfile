@@ -156,7 +156,7 @@ pipeline {
                     }
                     steps {
                         sh 'mvn clean package -PskipQA'
-                        sh "mvn install -T 1.4C -pl test -Dtimeout.factor=3"
+                        sh "mvn install -T 5 -pl test -Dtimeout.factor=3"
                     }
                 }
             }
