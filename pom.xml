@@ -963,10 +963,7 @@
               <java.io.tmpdir>${project.build.directory}</java.io.tmpdir>
             </systemPropertyVariables>
             <argLine>${unitTestMemSize}</argLine>
-            <parallel>classes</parallel>
-            <threadCount>4</threadCount>
-            <useUnlimitedThreads>true</useUnlimitedThreads>
-            <parallelTestTimeoutInSeconds>3.5</parallelTestTimeoutInSeconds>
+
           </configuration>
         </plugin>
         <plugin>
@@ -980,6 +977,8 @@
               <java.io.tmpdir>${project.build.directory}</java.io.tmpdir>
             </systemPropertyVariables>
             <trimStackTrace>false</trimStackTrace>
+            <parallel>classes</parallel>
+            <useUnlimitedThreads>true</useUnlimitedThreads>
           </configuration>
         </plugin>
         <plugin>
@@ -1300,6 +1299,18 @@
             <goals>
               <goal>integration-test</goal>
               <goal>verify</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>run-integration-test</id>
+            <goals>
+              <goal>test</goal>
             </goals>
           </execution>
         </executions>
