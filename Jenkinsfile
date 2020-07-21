@@ -120,7 +120,7 @@ pipeline {
                     }
                     steps {
                         sh 'mvn clean package -PskipQA'
-                        sh "mvn install -T 1C -pl server/tserver"
+                        sh "mvn install -pl server/tserver"
                     }
                 }
                  stage('Minicluster') {
@@ -147,7 +147,7 @@ pipeline {
                     }
                     steps {
                         sh 'mvn clean package -PskipQA'
-                        sh "mvn install -T 1C -pl start"
+                        sh "mvn install -pl start"
                     }
                 }
                  stage('Tests') {
