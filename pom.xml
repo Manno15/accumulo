@@ -977,8 +977,8 @@
               <java.io.tmpdir>${project.build.directory}</java.io.tmpdir>
             </systemPropertyVariables>
             <trimStackTrace>false</trimStackTrace>
-            <parallel>classes</parallel>
-            <useUnlimitedThreads>true</useUnlimitedThreads>
+            <forkCount>8</forkCount>
+            <reuseForks>true</reuseForks>
           </configuration>
         </plugin>
         <plugin>

@@ -156,7 +156,7 @@ pipeline {
                     }
                     steps {
                         sh 'mvn clean package -PskipQA'
-                        sh "mvn verify -T 6 -pl test -Dtimeout.factor=3"
+                        sh "mvn integration-test -T 1C -pl test -Dtimeout.factor=3"
                     }
                 }
             }
