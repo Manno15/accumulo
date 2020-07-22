@@ -963,7 +963,6 @@
               <java.io.tmpdir>${project.build.directory}</java.io.tmpdir>
             </systemPropertyVariables>
             <argLine>${unitTestMemSize}</argLine>
-
           </configuration>
         </plugin>
         <plugin>
@@ -977,8 +976,8 @@
               <java.io.tmpdir>${project.build.directory}</java.io.tmpdir>
             </systemPropertyVariables>
             <trimStackTrace>false</trimStackTrace>
-            <forkCount>4</forkCount>
-            <reuseForks>true</reuseForks>
+            <forkCount>3</forkCount>
+            <reuseForks>false</reuseForks>
           </configuration>
         </plugin>
         <plugin>
