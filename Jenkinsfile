@@ -30,7 +30,7 @@ pipeline {
                     }
                     steps {
                         sh 'mvn clean package -PskipQA'
-                        sh "mvn install -T 1C -pl assemble"
+                        sh "mvn install -pl assemble"
                     }
                 }
                 stage('Server/Base') {
@@ -39,7 +39,7 @@ pipeline {
                     }
                     steps {
                         sh 'mvn clean package -PskipQA'
-                        sh "mvn install -T 1C -pl server/base"
+                        sh "mvn install -pl server/base"
                     }
                 }
                 stage('Server/Monitor') {
@@ -48,7 +48,7 @@ pipeline {
                     }
                     steps {
                         sh 'mvn clean package -PskipQA'
-                        sh "mvn install -T 1C -pl server/monitor"
+                        sh "mvn install -pl server/monitor"
                     }
                 }
                 stage('Server/Native') {
@@ -57,7 +57,7 @@ pipeline {
                     }
                     steps {
                         sh 'mvn clean package -PskipQA'
-                        sh "mvn install -T 1C -pl server/native"
+                        sh "mvn install -pl server/native"
                     }
                 }
                 stage('core') {
@@ -66,7 +66,7 @@ pipeline {
                     }
                     steps {
                         sh 'mvn clean package -PskipQA'
-                        sh "mvn install -T 1C -pl core"
+                        sh "mvn install -pl core"
                     }
                 }
                  stage('Server/GC') {
@@ -75,7 +75,7 @@ pipeline {
                     }
                     steps {
                         sh 'mvn clean package -PskipQA'
-                        sh "mvn install -T 1C -pl server/gc"
+                        sh "mvn install -pl server/gc"
                     }
                 }
                 stage('Hadoop-mapreduce') {
@@ -84,7 +84,7 @@ pipeline {
                     }
                     steps {
                         sh 'mvn clean package -PskipQA'
-                        sh "mvn install -T 1C -pl hadoop-mapreduce"
+                        sh "mvn install -pl hadoop-mapreduce"
                     }
                 }
                 stage('Server/Master') {
@@ -93,7 +93,7 @@ pipeline {
                     }
                     steps {
                         sh 'mvn clean package -PskipQA'
-                        sh "mvn install -T 1C -pl server/master"
+                        sh "mvn install -pl server/master"
                     }
                 }
                  stage('Iterator-test-harness') {
@@ -102,7 +102,7 @@ pipeline {
                     }
                     steps {
                         sh 'mvn clean package -PskipQA'
-                        sh "mvn install -T 1C -pl iterator-test-harness"
+                        sh "mvn install -pl iterator-test-harness"
                     }
                 }
                 stage('Server/Tracer') {
@@ -111,7 +111,7 @@ pipeline {
                     }
                     steps {
                         sh 'mvn clean package -PskipQA'
-                        sh "mvn install -T 1C -pl server/tracer"
+                        sh "mvn install -pl server/tracer"
                     }
                 }
                  stage('Server/Tserver') {
@@ -120,7 +120,7 @@ pipeline {
                     }
                     steps {
                         sh 'mvn clean package -PskipQA'
-                        sh "mvn install -pl server/tserver"
+                        sh "mvn install server/tserver"
                     }
                 }
                  stage('Minicluster') {
@@ -129,7 +129,7 @@ pipeline {
                     }
                     steps {
                         sh 'mvn clean package -PskipQA'
-                        sh "mvn install -T 1C -pl minicluster"
+                        sh "mvn install -pl minicluster"
                     }
                 }
                  stage('Shell') {
@@ -138,7 +138,7 @@ pipeline {
                     }
                     steps {
                         sh 'mvn clean package -PskipQA'
-                        sh "mvn install -T 1C -pl shell"
+                        sh "mvn install -pl shell"
                     }
                 }
                  stage('Start') {
