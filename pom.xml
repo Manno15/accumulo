@@ -976,7 +976,7 @@
               <java.io.tmpdir>${project.build.directory}</java.io.tmpdir>
             </systemPropertyVariables>
             <trimStackTrace>false</trimStackTrace>
-            <forkCount>3</forkCount>
+            <forkCount>4</forkCount>
             <reuseForks>false</reuseForks>
           </configuration>
         </plugin>
