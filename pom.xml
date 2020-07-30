@@ -976,9 +976,9 @@
               <java.io.tmpdir>${project.build.directory}</java.io.tmpdir>
             </systemPropertyVariables>
             <trimStackTrace>false</trimStackTrace>
-            <forkCount>1C</forkCount>
+            <forkCount>.5C</forkCount>
             <reuseForks>false</reuseForks>
-            <argLine>-Xmx1024m -XX:MaxPermSize=512m</argLine>
+            <argLine>-Xmx512m -XX:MaxPermSize=256m</argLine>
           </configuration>
         </plugin>
         <plugin>
