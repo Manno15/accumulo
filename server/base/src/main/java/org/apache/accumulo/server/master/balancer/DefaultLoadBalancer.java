@@ -90,6 +90,7 @@ public class DefaultLoadBalancer extends TabletBalancer {
     
     TServerInstance result = assignments.next();
     if (!locations.containsKey(result)) {
+      log.info("!locations.containsKey");
       assignments = null;
       return randomize(locations.keySet()).iterator().next();
     }
