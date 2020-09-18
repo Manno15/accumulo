@@ -65,9 +65,10 @@ public class DefaultLoadBalancer extends TabletBalancer {
       TServerInstance last) {
     if (locations.isEmpty())
       return null;
-
+    log.info("I AM HERE");
     if (last != null) {
       // Maintain locality
+      log.info("If LAST IS NOT NULL");
       String fakeSessionID = " ";
       TServerInstance simple = new TServerInstance(last.getLocation(), fakeSessionID);
       Iterator<TServerInstance> find = locations.tailMap(simple).keySet().iterator();
@@ -81,8 +82,12 @@ public class DefaultLoadBalancer extends TabletBalancer {
     // The strategy here is to walk through the locations and hand them back, one at a time
     // Grab an iterator off of the set of options; use a new iterator if it hands back something not
     // in the current list.
-    if (assignments == null || !assignments.hasNext())
+
+    if (assignments == null || !assignments.hasNext()){
+      log.info("If assignments == null or !assignment.hasNext()");
       assignments = randomize(locations.keySet()).iterator();
+    }
+    
     TServerInstance result = assignments.next();
     if (!locations.containsKey(result)) {
       assignments = null;
