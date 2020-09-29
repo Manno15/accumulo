@@ -76,6 +76,8 @@ public class DefaultLoadBalancer extends TabletBalancer {
         TServerInstance current = find.next();
         if (current.host().equals(last.host()))
           return current;
+        else
+          log.info("Doesnt match");
       }
     }
 
