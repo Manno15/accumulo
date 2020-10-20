@@ -25,12 +25,14 @@ import org.apache.accumulo.core.client.admin.TimeType;
 import org.apache.accumulo.core.clientImpl.thrift.TableOperation;
 import org.apache.accumulo.core.data.NamespaceId;
 import org.apache.accumulo.core.data.TableId;
+import org.apache.accumulo.core.volume.Volume;
 import org.apache.accumulo.fate.Repo;
 import org.apache.accumulo.master.Master;
 import org.apache.accumulo.master.tableOps.MasterRepo;
 import org.apache.accumulo.master.tableOps.TableInfo;
 import org.apache.accumulo.master.tableOps.Utils;
 import org.apache.accumulo.server.fs.VolumeManager;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 
 public class CreateTable extends MasterRepo {
@@ -83,9 +85,10 @@ public class CreateTable extends MasterRepo {
 
   @Override
   public void undo(long tid, Master env) throws Exception{
-    VolumeManager fs = env.getVolumeManager();
-    fs.deleteRecursively(new Path(tableInfo.getSplitDirsFile()));
-    fs.deleteRecursively(new Path(tableInfo.getSplitFile()));
+    Volume defaultVolume = env.getVolumeManager().getDefaultVolume();
+    FileSystem fs = defaultVolume.getFileSystem();
+    fs.delete(new Path(tableInfo.getSplitFile()), true);
+    fs.delete(new Path(tableInfo.getSplitDirsFile()), true);
     Utils.unreserveNamespace(env, tableInfo.getNamespaceId(), tid, false);
   }
 
