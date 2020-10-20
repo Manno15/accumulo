@@ -30,6 +30,8 @@ import org.apache.accumulo.master.Master;
 import org.apache.accumulo.master.tableOps.MasterRepo;
 import org.apache.accumulo.master.tableOps.TableInfo;
 import org.apache.accumulo.master.tableOps.Utils;
+import org.apache.accumulo.server.fs.VolumeManager;
+import org.apache.hadoop.fs.Path;
 
 public class CreateTable extends MasterRepo {
   private static final long serialVersionUID = 1L;
@@ -80,7 +82,9 @@ public class CreateTable extends MasterRepo {
   }
 
   @Override
-  public void undo(long tid, Master env) {
+  public void undo(long tid, Master env) throws Exception{
+    VolumeManager fs = env.getVolumeManager();
+    fs.deleteRecursively(new Path(tableInfo.getSplitDirsFile()));
     Utils.unreserveNamespace(env, tableInfo.getNamespaceId(), tid, false);
   }
 
