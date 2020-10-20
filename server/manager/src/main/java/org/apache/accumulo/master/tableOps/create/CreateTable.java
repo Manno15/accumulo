@@ -69,6 +69,9 @@ public class CreateTable extends MasterRepo {
     Utils.getIdLock().lock();
     try {
       String tName = tableInfo.getTableName();
+      if(tName.equals("test_ingest")){
+        Thread.sleep(50000);
+      }
       tableInfo.setTableId(Utils.getNextId(tName, master.getContext(), TableId::of));
       return new SetupPermissions(tableInfo);
     } finally {
