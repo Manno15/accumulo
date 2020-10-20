@@ -85,6 +85,7 @@ public class CreateTable extends MasterRepo {
   public void undo(long tid, Master env) throws Exception{
     VolumeManager fs = env.getVolumeManager();
     fs.deleteRecursively(new Path(tableInfo.getSplitDirsFile()));
+    fs.deleteRecursively(new Path(tableInfo.getSplitFile()));
     Utils.unreserveNamespace(env, tableInfo.getNamespaceId(), tid, false);
   }
 
