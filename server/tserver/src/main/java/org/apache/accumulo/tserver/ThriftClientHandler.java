@@ -1320,25 +1320,36 @@ class ThriftClientHandler extends ClientServiceHandler implements TabletClientSe
     return result;
   }
 
-  private void checkPermission(TCredentials credentials, String lock, final String request)
+  private void checkPermission(TCredentials credentials, String lock, boolean required, final String request)
       throws ThriftSecurityException {
-    try {
-      log.trace("Got {} message from user: {}", request, credentials.getPrincipal());
-      if (!security.canPerformSystemActions(credentials)) {
-        log.warn("Got {} message from user: {}", request, credentials.getPrincipal());
-        throw new ThriftSecurityException(credentials.getPrincipal(),
-            SecurityErrorCode.PERMISSION_DENIED);
+    if(required) {
+      boolean fatal = false;
+      try {
+        log.trace("Got {} message from user: {}", request, credentials.getPrincipal());
+        if (!security.canPerformSystemActions(credentials)) {
+          log.warn("Got {} message from user: {}", request, credentials.getPrincipal());
+          throw new ThriftSecurityException(credentials.getPrincipal(),
+                  SecurityErrorCode.PERMISSION_DENIED);
+        }
+      } catch (ThriftSecurityException e) {
+        log.warn("Got {} message from unauthenticatable user: {}", request, e.getUser());
+        if (context.getCredentials().getToken().getClass().getName()
+                .equals(credentials.getTokenClassName())) {
+          log.error("Got message from a service with a mismatched configuration."
+                  + " Please ensure a compatible configuration.", e);
+          fatal = true;
+        }
+        throw e;
+      } finally {
+        if (fatal) {
+          Halt.halt(1, () -> {
+            log.info("Tablet server no longer holds lock during checkPermission() : {}, exiting",
+                    request);
+            server.gcLogger.logGCInfo(server.getConfiguration());
+          });
+        }
       }
-    } catch (ThriftSecurityException e) {
-      log.warn("Got {} message from unauthenticatable user: {}", request, e.getUser());
-      if (context.getCredentials().getToken().getClass().getName()
-          .equals(credentials.getTokenClassName())) {
-        log.error("Got message from a service with a mismatched configuration."
-            + " Please ensure a compatible configuration.", e);
-      }
-      throw e;
     }
-
     if (server.getLock() == null || !server.getLock().wasLockAcquired()) {
       log.debug("Got {} message before my lock was acquired, ignoring...", request);
       throw new RuntimeException("Lock not acquired");
@@ -1379,7 +1390,7 @@ class ThriftClientHandler extends ClientServiceHandler implements TabletClientSe
       final TKeyExtent textent) {
 
     try {
-      checkPermission(credentials, lock, "loadTablet");
+      checkPermission(credentials, lock, true, "loadTablet");
     } catch (ThriftSecurityException e) {
       log.error("Caller doesn't have permission to load a tablet", e);
       throw new RuntimeException(e);
@@ -1465,7 +1476,7 @@ class ThriftClientHandler extends ClientServiceHandler implements TabletClientSe
   public void unloadTablet(TInfo tinfo, TCredentials credentials, String lock, TKeyExtent textent,
       TUnloadTabletGoal goal, long requestTime) {
     try {
-      checkPermission(credentials, lock, "unloadTablet");
+      checkPermission(credentials, lock, true, "unloadTablet");
     } catch (ThriftSecurityException e) {
       log.error("Caller doesn't have permission to unload a tablet", e);
       throw new RuntimeException(e);
@@ -1481,7 +1492,7 @@ class ThriftClientHandler extends ClientServiceHandler implements TabletClientSe
   public void flush(TInfo tinfo, TCredentials credentials, String lock, String tableId,
       ByteBuffer startRow, ByteBuffer endRow) {
     try {
-      checkPermission(credentials, lock, "flush");
+      checkPermission(credentials, lock, true, "flush");
     } catch (ThriftSecurityException e) {
       log.error("Caller doesn't have permission to flush a table", e);
       throw new RuntimeException(e);
@@ -1519,7 +1530,7 @@ class ThriftClientHandler extends ClientServiceHandler implements TabletClientSe
   @Override
   public void flushTablet(TInfo tinfo, TCredentials credentials, String lock, TKeyExtent textent) {
     try {
-      checkPermission(credentials, lock, "flushTablet");
+      checkPermission(credentials, lock, true,"flushTablet");
     } catch (ThriftSecurityException e) {
       log.error("Caller doesn't have permission to flush a tablet", e);
       throw new RuntimeException(e);
@@ -1541,7 +1552,7 @@ class ThriftClientHandler extends ClientServiceHandler implements TabletClientSe
   public void halt(TInfo tinfo, TCredentials credentials, String lock)
       throws ThriftSecurityException {
 
-    checkPermission(credentials, lock, "halt");
+    checkPermission(credentials, lock, true, "halt");
 
     Halt.halt(0, () -> {
       log.info("Master requested tablet server halt");
@@ -1573,7 +1584,7 @@ class ThriftClientHandler extends ClientServiceHandler implements TabletClientSe
   public List<ActiveScan> getActiveScans(TInfo tinfo, TCredentials credentials)
       throws ThriftSecurityException, TException {
     try {
-      checkPermission(credentials, null, "getScans");
+      checkPermission(credentials, null, true,"getScans");
     } catch (ThriftSecurityException e) {
       log.error("Caller doesn't have permission to get active scans", e);
       throw e;
@@ -1585,7 +1596,7 @@ class ThriftClientHandler extends ClientServiceHandler implements TabletClientSe
   @Override
   public void chop(TInfo tinfo, TCredentials credentials, String lock, TKeyExtent textent) {
     try {
-      checkPermission(credentials, lock, "chop");
+      checkPermission(credentials, lock, true, "chop");
     } catch (ThriftSecurityException e) {
       log.error("Caller doesn't have permission to chop extent", e);
       throw new RuntimeException(e);
@@ -1603,7 +1614,7 @@ class ThriftClientHandler extends ClientServiceHandler implements TabletClientSe
   public void compact(TInfo tinfo, TCredentials credentials, String lock, String tableId,
       ByteBuffer startRow, ByteBuffer endRow) {
     try {
-      checkPermission(credentials, lock, "compact");
+      checkPermission(credentials, lock, true, "compact");
     } catch (ThriftSecurityException e) {
       log.error("Caller doesn't have permission to compact a table", e);
       throw new RuntimeException(e);
@@ -1635,7 +1646,7 @@ class ThriftClientHandler extends ClientServiceHandler implements TabletClientSe
   public List<ActiveCompaction> getActiveCompactions(TInfo tinfo, TCredentials credentials)
       throws ThriftSecurityException, TException {
     try {
-      checkPermission(credentials, null, "getActiveCompactions");
+      checkPermission(credentials, null, true, "getActiveCompactions");
     } catch (ThriftSecurityException e) {
       log.error("Caller doesn't have permission to get active compactions", e);
       throw e;
