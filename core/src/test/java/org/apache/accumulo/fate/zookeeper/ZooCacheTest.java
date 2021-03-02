@@ -64,7 +64,7 @@ public class ZooCacheTest {
     expectLastCall().anyTimes();
     replay(zr);
 
-    zc = new ZooCache(zr, null);
+    zc = new ZooCache(zr, 0, null);
   }
 
   @Test
@@ -265,7 +265,7 @@ public class ZooCacheTest {
     WatchedEvent event =
         new WatchedEvent(eventType, Watcher.Event.KeeperState.SyncConnected, ZPATH);
     TestWatcher exw = new TestWatcher(event);
-    zc = new ZooCache(zr, exw);
+    zc = new ZooCache(zr, 0, exw);
 
     Watcher w = watchData(initialData);
     w.process(event);
@@ -303,7 +303,7 @@ public class ZooCacheTest {
   private void testWatchDataNode_Clear(Watcher.Event.KeeperState state) throws Exception {
     WatchedEvent event = new WatchedEvent(Watcher.Event.EventType.None, state, null);
     TestWatcher exw = new TestWatcher(event);
-    zc = new ZooCache(zr, exw);
+    zc = new ZooCache(zr, 0, exw);
 
     Watcher w = watchData(DATA);
     assertTrue(zc.dataCached(ZPATH));
@@ -337,7 +337,7 @@ public class ZooCacheTest {
     WatchedEvent event =
         new WatchedEvent(eventType, Watcher.Event.KeeperState.SyncConnected, ZPATH);
     TestWatcher exw = new TestWatcher(event);
-    zc = new ZooCache(zr, exw);
+    zc = new ZooCache(zr, 0, exw);
 
     Watcher w = watchChildren(initialChildren);
     w.process(event);

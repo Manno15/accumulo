@@ -84,7 +84,7 @@ public class ListInstances {
 
     System.out.println("INFO : Using ZooKeepers " + keepers);
     ZooReader rdr = new ZooReader(keepers, ZOOKEEPER_TIMER_MILLIS);
-    ZooCache cache = new ZooCache(keepers, ZOOKEEPER_TIMER_MILLIS);
+    ZooCache cache = new ZooCache(keepers, ZOOKEEPER_TIMER_MILLIS,0);
 
     TreeMap<String,UUID> instanceNames = getInstanceNames(rdr, printErrors);
 

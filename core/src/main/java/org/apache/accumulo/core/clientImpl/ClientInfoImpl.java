@@ -23,6 +23,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Objects;
 import java.util.Properties;
 
 import org.apache.accumulo.core.client.security.tokens.AuthenticationToken;
@@ -66,6 +67,11 @@ public class ClientInfoImpl implements ClientInfo {
   public int getZooKeepersSessionTimeOut() {
     return (int) ConfigurationTypeHelper
         .getTimeInMillis(ClientProperty.INSTANCE_ZOOKEEPERS_TIMEOUT.getValue(properties));
+  }
+
+  @Override
+  public long getRetryCount(){
+    return Objects.requireNonNull(ClientProperty.INSTANCE_ZOOKEEPERS_RETRYCOUNT.getInteger(properties)).longValue();
   }
 
   @Override

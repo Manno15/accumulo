@@ -140,7 +140,7 @@ public class ClientContext implements AccumuloClient {
     this.info = info;
     this.hadoopConf = info.getHadoopConf();
     zooCache =
-        new ZooCacheFactory().getZooCache(info.getZooKeepers(), info.getZooKeepersSessionTimeOut());
+        new ZooCacheFactory().getZooCache(info.getZooKeepers(), info.getZooKeepersSessionTimeOut(), info.getRetryCount());
     this.serverConf = serverConf;
     timeoutSupplier = memoizeWithExpiration(
         () -> getConfiguration().getTimeInMillis(Property.GENERAL_RPC_TIMEOUT));
@@ -463,6 +463,11 @@ public class ClientContext implements AccumuloClient {
   public int getZooKeepersSessionTimeOut() {
     ensureOpen();
     return info.getZooKeepersSessionTimeOut();
+  }
+
+  public long getRetryCount() {
+    ensureOpen();
+    return info.getRetryCount();
   }
 
   public ZooCache getZooCache() {

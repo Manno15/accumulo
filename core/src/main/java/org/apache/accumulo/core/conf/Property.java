@@ -94,6 +94,8 @@ public enum Property {
       "Zookeeper session timeout; "
           + "max value when represented as milliseconds should be no larger than "
           + Integer.MAX_VALUE),
+  INSTANCE_ZOOKEEPERS_RETRYCOUNT("instace.zookeepers.retrycount", "0", PropertyType.COUNT,
+          "Zookeeper retry count for zooCache"),
   @Sensitive
   INSTANCE_SECRET("instance.secret", "DEFAULT", PropertyType.STRING,
       "A secret unique to a given instance that all servers must know in order"

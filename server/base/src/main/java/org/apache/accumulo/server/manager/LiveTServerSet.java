@@ -244,7 +244,7 @@ public class LiveTServerSet implements Watcher {
 
   public synchronized ZooCache getZooCache() {
     if (zooCache == null)
-      zooCache = new ZooCache(context.getZooReaderWriter(), this);
+      zooCache = new ZooCache(context.getZooReaderWriter(), context.getRetryCount(), this);
     return zooCache;
   }
 

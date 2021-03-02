@@ -61,7 +61,7 @@ class ZooConfigurationFactory {
           @Override
           public void process(WatchedEvent arg0) {}
         };
-        propCache = zcf.getZooCache(context.getZooKeepers(), context.getZooKeepersSessionTimeOut(),
+        propCache = zcf.getZooCache(context.getZooKeepers(), context.getZooKeepersSessionTimeOut(), context.getRetryCount(),
             watcher);
         config = new ZooConfiguration(context, propCache, parent);
         instances.put(context.getInstanceID(), config);

@@ -65,7 +65,7 @@ public class ZooCacheFactoryTest {
     String zks1 = "zk1";
     int timeout1 = 1000;
     Watcher watcher = createMock(Watcher.class);
-    ZooCache zc1 = zcf.getZooCache(zks1, timeout1, watcher);
+    ZooCache zc1 = zcf.getZooCache(zks1, timeout1, 0, watcher);
     assertNotNull(zc1);
   }
 
@@ -73,7 +73,7 @@ public class ZooCacheFactoryTest {
   public void testGetZooCacheWatcher_Null() {
     String zks1 = "zk1";
     int timeout1 = 1000;
-    ZooCache zc1 = zcf.getZooCache(zks1, timeout1, null);
+    ZooCache zc1 = zcf.getZooCache(zks1, timeout1, 0,null);
     assertNotNull(zc1);
     ZooCache zc1a = zcf.getZooCache(zks1, timeout1);
     assertSame(zc1, zc1a);

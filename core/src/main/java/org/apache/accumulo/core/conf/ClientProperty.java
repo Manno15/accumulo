@@ -47,6 +47,8 @@ public enum ClientProperty {
       "Zookeeper connection information for Accumulo instance", "2.0.0", true),
   INSTANCE_ZOOKEEPERS_TIMEOUT("instance.zookeepers.timeout", "30s", PropertyType.TIMEDURATION,
       "Zookeeper session timeout", "2.0.0", false),
+  INSTANCE_ZOOKEEPERS_RETRYCOUNT("instace.zookeepers.retrycount", "0", PropertyType.COUNT,
+          "Zookeeper retry count for zooCache", "2.1.0", false),
 
   // Authentication
   AUTH_TYPE("auth.type", "password", PropertyType.STRING,

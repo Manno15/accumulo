@@ -89,7 +89,7 @@ public class ZooCacheFactory {
    *          session timeout
    * @return cache object
    */
-  public ZooCache getZooCache(String zooKeepers, int sessionTimeout) {
+  public ZooCache getZooCache(String zooKeepers, int sessionTimeout, long retryCount) {
     String key = zooKeepers + ":" + sessionTimeout;
     synchronized (instances) {
       if (!isEnabled()) {
@@ -98,7 +98,33 @@ public class ZooCacheFactory {
       }
       ZooCache zc = instances.get(key);
       if (zc == null) {
-        zc = new ZooCache(zooKeepers, sessionTimeout);
+        zc = new ZooCache(zooKeepers, sessionTimeout, retryCount);
+        instances.put(key, zc);
+      }
+      return zc;
+    }
+  }
+
+  /**
+   * Gets a {@link ZooCache}. The same object may be returned for multiple calls with the same
+   * arguments.
+   *
+   * @param zooKeepers
+   *          comma-separated list of ZooKeeper host[:port]s
+   * @param sessionTimeout
+   *          session timeout
+   * @return cache object
+   */
+  public ZooCache getZooCache(String zooKeepers, int sessionTimeout) {
+    String key = zooKeepers + ":" + sessionTimeout;
+    synchronized (instances) {
+      if (!isEnabled()) {
+        throw new IllegalStateException("The Accumulo singleton for zookeeper caching is "
+                + "disabled. This is likely caused by all AccumuloClients being closed");
+      }
+      ZooCache zc = instances.get(key);
+      if (zc == null) {
+        zc = new ZooCache(zooKeepers, sessionTimeout, 0);
         instances.put(key, zc);
       }
       return zc;
@@ -117,12 +143,12 @@ public class ZooCacheFactory {
    *          watcher (optional)
    * @return cache object
    */
-  public ZooCache getZooCache(String zooKeepers, int sessionTimeout, Watcher watcher) {
+  public ZooCache getZooCache(String zooKeepers, int sessionTimeout, long retryCount, Watcher watcher) {
     if (watcher == null) {
       // reuse
-      return getZooCache(zooKeepers, sessionTimeout);
+      return getZooCache(zooKeepers, sessionTimeout, retryCount);
     }
-    return new ZooCache(zooKeepers, sessionTimeout, watcher);
+    return new ZooCache(zooKeepers, sessionTimeout, retryCount, watcher);
   }
 
   /**

@@ -239,7 +239,7 @@ public class TabletServer extends AbstractServer {
     super("tserver", opts, args);
     ServerContext context = super.getContext();
     context.setupCrypto();
-    this.managerLockCache = new ZooCache(context.getZooReaderWriter(), null);
+    this.managerLockCache = new ZooCache(context.getZooReaderWriter(), context.getRetryCount(), null);
     final AccumuloConfiguration aconf = getConfiguration();
     log.info("Version " + Constants.VERSION);
     log.info("Instance " + getInstanceID());

@@ -126,7 +126,7 @@ public class ServerContext extends ClientContext {
   @Override
   public AccumuloConfiguration getConfiguration() {
     if (systemConfig == null) {
-      ZooCache propCache = new ZooCache(getZooKeepers(), getZooKeepersSessionTimeOut());
+      ZooCache propCache = new ZooCache(getZooKeepers(), getZooKeepersSessionTimeOut(), getRetryCount());
       systemConfig = new ZooConfiguration(this, propCache, getSiteConfiguration());
     }
     return systemConfig;

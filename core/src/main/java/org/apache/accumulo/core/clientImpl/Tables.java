@@ -105,7 +105,7 @@ public class Tables {
     }
 
     return new ZooCacheFactory().getZooCache(context.getZooKeepers(),
-        context.getZooKeepersSessionTimeOut());
+        context.getZooKeepersSessionTimeOut(), context.getRetryCount());
   }
 
   /**

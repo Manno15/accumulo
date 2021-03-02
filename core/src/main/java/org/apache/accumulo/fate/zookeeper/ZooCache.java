@@ -62,6 +62,7 @@ public class ZooCache {
 
   private final ZooReader zReader;
   private final SecureRandom secureRandom = new SecureRandom();
+  private final long retryCount;
 
   private volatile boolean closed = false;
 
@@ -207,8 +208,8 @@ public class ZooCache {
    * @param sessionTimeout
    *          ZooKeeper session timeout
    */
-  public ZooCache(String zooKeepers, int sessionTimeout) {
-    this(zooKeepers, sessionTimeout, null);
+  public ZooCache(String zooKeepers, int sessionTimeout, long retryCount) {
+    this(zooKeepers, sessionTimeout, retryCount, null);
   }
 
   /**
@@ -221,12 +222,12 @@ public class ZooCache {
    * @param watcher
    *          watcher object
    */
-  public ZooCache(String zooKeepers, int sessionTimeout, Watcher watcher) {
-    this(new ZooReader(zooKeepers, sessionTimeout), watcher);
+  public ZooCache(String zooKeepers, int sessionTimeout, long retryCount, Watcher watcher) {
+    this(new ZooReader(zooKeepers, sessionTimeout), retryCount, watcher);
   }
 
   public ZooCache(ZooReaderWriter reader) {
-    this(reader, null);
+    this(reader, 0, null);
   }
 
   /**
@@ -237,12 +238,13 @@ public class ZooCache {
    * @param watcher
    *          watcher object
    */
-  public ZooCache(ZooReader reader, Watcher watcher) {
+  public ZooCache(ZooReader reader, long retryCount, Watcher watcher) {
     this.zReader = reader;
     this.cache = new HashMap<>();
     this.statCache = new HashMap<>();
     this.childrenCache = new HashMap<>();
     this.externalWatcher = watcher;
+    this.retryCount = retryCount;
   }
 
   private abstract class ZooRunnable<T> {
@@ -271,10 +273,12 @@ public class ZooCache {
     public T retry() {
 
       int sleepTime = 100;
+      long retries = 0;
 
-      while (true) {
+      while (retryPermitted(retryCount)) {
 
         try {
+          retries++;
           return run();
         } catch (KeeperException e) {
           final Code code = e.code();
@@ -304,8 +308,12 @@ public class ZooCache {
           sleepTime = (int) (sleepTime + sleepTime * secureRandom.nextDouble());
         }
       }
+      return null;
     }
 
+  }
+  private boolean retryPermitted(long retries) {
+    return (retryCount == 0 || retries < retryCount);
   }
 
   /**

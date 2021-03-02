@@ -169,7 +169,7 @@ public class ReadWriteIT extends AccumuloClusterHarness {
       control.adminStopAll();
       ClientInfo info = ClientInfo.from(accumuloClient.properties());
       ZooReader zreader = new ZooReader(info.getZooKeepers(), info.getZooKeepersSessionTimeOut());
-      ZooCache zcache = new ZooCache(zreader, null);
+      ZooCache zcache = new ZooCache(zreader, info.getRetryCount(),null);
       byte[] managerLockData;
       do {
         managerLockData = ZooLock.getLockData(zcache,

@@ -47,6 +47,8 @@ public interface ClientInfo {
    */
   int getZooKeepersSessionTimeOut();
 
+  long getRetryCount();
+
   /**
    * @return Accumulo principal/username
    */

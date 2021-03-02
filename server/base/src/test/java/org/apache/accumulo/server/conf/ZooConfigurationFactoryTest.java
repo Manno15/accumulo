@@ -59,7 +59,7 @@ public class ZooConfigurationFactoryTest {
     expect(context.getZooKeepers()).andReturn("localhost").anyTimes();
     expect(context.getZooKeepersSessionTimeOut()).andReturn(120000).anyTimes();
     replay(context);
-    expect(zcf.getZooCache(eq("localhost"), eq(120000), isA(Watcher.class))).andReturn(zc)
+    expect(zcf.getZooCache(eq("localhost"), eq(120000), eq(0), isA(Watcher.class))).andReturn(zc)
         .anyTimes();
     replay(zcf);
 

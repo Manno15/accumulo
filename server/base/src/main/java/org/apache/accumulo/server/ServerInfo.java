@@ -51,6 +51,7 @@ public class ServerInfo implements ClientInfo {
   private String instanceName;
   private String zooKeepers;
   private int zooKeepersSessionTimeOut;
+  private long retryCount;
   private VolumeManager volumeManager;
   private ZooCache zooCache;
 
@@ -97,6 +98,7 @@ public class ServerInfo implements ClientInfo {
     instanceID = VolumeManager.getInstanceIDFromHdfs(instanceIdPath, hadoopConf);
     zooKeepers = config.get(Property.INSTANCE_ZK_HOST);
     zooKeepersSessionTimeOut = (int) config.getTimeInMillis(Property.INSTANCE_ZK_TIMEOUT);
+    retryCount = config.getCount(Property.INSTANCE_ZOOKEEPERS_RETRYCOUNT);
     zooCache = new ZooCacheFactory().getZooCache(zooKeepers, zooKeepersSessionTimeOut);
     instanceName = InstanceOperationsImpl.lookupInstanceName(zooCache, UUID.fromString(instanceID));
   }
@@ -113,6 +115,7 @@ public class ServerInfo implements ClientInfo {
     this.instanceID = instanceID;
     zooKeepers = config.get(Property.INSTANCE_ZK_HOST);
     zooKeepersSessionTimeOut = (int) config.getTimeInMillis(Property.INSTANCE_ZK_TIMEOUT);
+    retryCount = config.getCount(Property.INSTANCE_ZOOKEEPERS_RETRYCOUNT);
     zooCache = new ZooCacheFactory().getZooCache(zooKeepers, zooKeepersSessionTimeOut);
     this.instanceName = instanceName;
   }
@@ -137,6 +140,11 @@ public class ServerInfo implements ClientInfo {
   @Override
   public int getZooKeepersSessionTimeOut() {
     return zooKeepersSessionTimeOut;
+  }
+
+  @Override
+  public long getRetryCount(){
+    return retryCount;
   }
 
   @Override
